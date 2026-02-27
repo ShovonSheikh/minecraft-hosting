@@ -67,7 +67,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         : null;
 
     return (
-        <div className="bg-[#090A0C] text-[#B9C1D1] font-sans h-screen flex overflow-hidden selection:bg-[#F8B84E]/30 relative">
+        <div className="bg-[#090A0C] text-[#B9C1D1] font-sans fixed inset-0 flex overflow-hidden selection:bg-[#F8B84E]/30">
             <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
 
             {/* Mobile Overlay */}
@@ -124,10 +124,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </aside>
 
             {/* Main Content Area */}
-            <main className="flex-1 flex flex-col h-screen relative min-w-0">
+            <main className="flex-1 flex flex-col h-full relative min-w-0 overflow-hidden">
 
                 {/* Top Header */}
-                <header className="h-16 bg-[#1A1D24]/80 backdrop-blur-md border-b border-[#333947] flex items-center justify-between px-4 sm:px-6 sticky top-0 z-10 shrink-0">
+                <header className="h-16 bg-[#1A1D24]/80 backdrop-blur-md border-b border-[#333947] flex items-center justify-between px-4 sm:px-6 shrink-0 z-10 w-full">
                     <div className="flex items-center gap-4 min-w-0">
                         <button className="md:hidden text-[#B9C1D1] hover:text-[#FFFFFF]" onClick={() => setMobileOpen(true)}>
                             <i className="fa-solid fa-bars text-xl"></i>

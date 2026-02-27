@@ -1,0 +1,809 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ServerSpace - Minecraft Panel</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts -->
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+        rel="stylesheet">
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    colors: {
+                        slate: {
+                            850: '#151e2e',
+                            900: '#0f172a',
+                            950: '#020617',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Custom scrollbar for the terminal */
+        .terminal-scroll::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .terminal-scroll::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .terminal-scroll::-webkit-scrollbar-thumb {
+            background: #334155;
+            border-radius: 4px;
+        }
+
+        .terminal-scroll::-webkit-scrollbar-thumb:hover {
+            background: #475569;
+        }
+    </style>
+</head>
+
+<body class="bg-slate-950 text-slate-200 font-sans h-screen flex overflow-hidden selection:bg-blue-500/30">
+
+    <!-- Sidebar Navigation -->
+    <aside class="w-64 bg-slate-900 border-r border-slate-800 flex flex-col hidden md:flex transition-all z-20">
+        <!-- Logo Area -->
+        <div class="h-16 flex items-center px-6 border-b border-slate-800">
+            <div
+                class="w-8 h-8 rounded bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center mr-3 shadow-lg shadow-blue-500/20">
+                <i class="fa-solid fa-cube text-white"></i>
+            </div>
+            <span class="text-xl font-bold tracking-tight text-white">ServerSpace</span>
+        </div>
+
+        <!-- Nav Links -->
+        <div class="flex-1 overflow-y-auto py-6 px-3 space-y-1">
+            <p class="px-3 text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Management</p>
+
+            <a href="#" id="nav-overview" onclick="switchPage('overview')"
+                class="nav-link flex items-center px-3 py-2.5 bg-blue-600/10 text-blue-400 rounded-lg group transition-colors">
+                <i class="fa-solid fa-chart-pie w-5 text-center mr-3"></i>
+                <span class="font-medium">Overview</span>
+            </a>
+            <a href="#" id="nav-console" onclick="switchPage('console')"
+                class="nav-link flex items-center px-3 py-2.5 text-slate-400 hover:text-slate-100 hover:bg-slate-800/50 rounded-lg group transition-colors">
+                <i class="fa-solid fa-terminal w-5 text-center mr-3"></i>
+                <span class="font-medium">Console</span>
+            </a>
+            <a href="#" id="nav-filemanager" onclick="switchPage('filemanager')"
+                class="nav-link flex items-center px-3 py-2.5 text-slate-400 hover:text-slate-100 hover:bg-slate-800/50 rounded-lg group transition-colors">
+                <i class="fa-solid fa-folder-open w-5 text-center mr-3"></i>
+                <span class="font-medium">File Manager</span>
+            </a>
+            <a href="#" id="nav-players" onclick="switchPage('players')"
+                class="nav-link flex items-center px-3 py-2.5 text-slate-400 hover:text-slate-100 hover:bg-slate-800/50 rounded-lg group transition-colors">
+                <i class="fa-solid fa-users w-5 text-center mr-3"></i>
+                <span class="font-medium flex-1">Players</span>
+                <span class="bg-slate-800 text-xs py-0.5 px-2 rounded-full">12/50</span>
+            </a>
+
+            <div class="pt-4 pb-2">
+                <p class="px-3 text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Configuration</p>
+            </div>
+
+            <a href="#" id="nav-plugins" onclick="switchPage('plugins')"
+                class="nav-link flex items-center px-3 py-2.5 text-slate-400 hover:text-slate-100 hover:bg-slate-800/50 rounded-lg group transition-colors">
+                <i class="fa-solid fa-puzzle-piece w-5 text-center mr-3"></i>
+                <span class="font-medium">Plugins/Mods</span>
+            </a>
+            <a href="#" id="nav-startup" onclick="switchPage('startup')"
+                class="nav-link flex items-center px-3 py-2.5 text-slate-400 hover:text-slate-100 hover:bg-slate-800/50 rounded-lg group transition-colors">
+                <i class="fa-solid fa-server w-5 text-center mr-3"></i>
+                <span class="font-medium">Startup</span>
+            </a>
+            <a href="#" id="nav-backups" onclick="switchPage('backups')"
+                class="nav-link flex items-center px-3 py-2.5 text-slate-400 hover:text-slate-100 hover:bg-slate-800/50 rounded-lg group transition-colors">
+                <i class="fa-solid fa-floppy-disk w-5 text-center mr-3"></i>
+                <span class="font-medium">Backups</span>
+            </a>
+            <a href="#" id="nav-settings" onclick="switchPage('settings')"
+                class="nav-link flex items-center px-3 py-2.5 text-slate-400 hover:text-slate-100 hover:bg-slate-800/50 rounded-lg group transition-colors">
+                <i class="fa-solid fa-gear w-5 text-center mr-3"></i>
+                <span class="font-medium">Settings</span>
+            </a>
+        </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="flex-1 flex flex-col h-screen relative">
+
+        <!-- Top Header -->
+        <header
+            class="h-16 bg-slate-900/80 backdrop-blur-md border-b border-slate-800 flex items-center justify-between px-4 sm:px-6 sticky top-0 z-10">
+            <div class="flex items-center gap-4">
+                <button class="md:hidden text-slate-400 hover:text-white">
+                    <i class="fa-solid fa-bars text-xl"></i>
+                </button>
+
+                <div>
+                    <h1 class="text-lg font-bold text-white leading-tight">Survival SMP #1204</h1>
+                    <div class="flex items-center gap-2 text-xs text-slate-400 mt-0.5">
+                        <span class="flex items-center gap-1.5 text-emerald-400 font-medium">
+                            <span class="relative flex h-2 w-2">
+                                <span
+                                    class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                                <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                            </span>
+                            Online
+                        </span>
+                        <span class="hidden sm:inline">&bull;</span>
+                        <span
+                            class="hidden sm:flex items-center gap-1 hover:text-slate-300 cursor-pointer transition-colors"
+                            onclick="copyIP()">
+                            play.serverspace.host:25565 <i class="fa-regular fa-copy"></i>
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-4">
+                <button
+                    class="w-8 h-8 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center hover:bg-slate-700 transition-colors">
+                    <i class="fa-solid fa-bell text-slate-400 text-sm"></i>
+                </button>
+                <div
+                    class="w-8 h-8 rounded-full bg-indigo-500 border-2 border-slate-800 overflow-hidden cursor-pointer">
+                    <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Felix" alt="User"
+                        class="w-full h-full object-cover">
+                </div>
+            </div>
+        </header>
+
+        <!-- Scrollable Page Content -->
+        <div class="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
+            <div id="page-overview" class="page-section max-w-7xl mx-auto space-y-6 block">
+
+                <!-- Quick Actions / Power Panel -->
+                <div
+                    class="bg-slate-900 border border-slate-800 rounded-xl p-5 flex flex-col sm:flex-row items-center justify-between gap-4">
+                    <div>
+                        <h2 class="text-white font-semibold">Power Controls</h2>
+                        <p class="text-sm text-slate-400">Manage your server's power state.</p>
+                    </div>
+                    <div class="flex items-center gap-3 w-full sm:w-auto">
+                        <button
+                            class="flex-1 sm:flex-none px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white font-medium rounded-lg shadow-lg shadow-emerald-500/20 transition-all flex items-center justify-center gap-2">
+                            <i class="fa-solid fa-play text-sm"></i> Start
+                        </button>
+                        <button
+                            class="flex-1 sm:flex-none px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white font-medium rounded-lg shadow-lg shadow-blue-500/20 transition-all flex items-center justify-center gap-2">
+                            <i class="fa-solid fa-rotate-right text-sm"></i> Restart
+                        </button>
+                        <button
+                            class="flex-1 sm:flex-none px-4 py-2 bg-rose-500 hover:bg-rose-600 text-white font-medium rounded-lg shadow-lg shadow-rose-500/20 transition-all flex items-center justify-center gap-2">
+                            <i class="fa-solid fa-power-off text-sm"></i> Stop
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Resource Metrics (Grid) -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+                    <!-- CPU Card -->
+                    <div class="bg-slate-900 border border-slate-800 rounded-xl p-5">
+                        <div class="flex justify-between items-center mb-4">
+                            <div class="flex items-center gap-2 text-slate-400">
+                                <i class="fa-solid fa-microchip"></i>
+                                <span class="text-sm font-medium">CPU Usage</span>
+                            </div>
+                            <span
+                                class="text-xs font-semibold text-emerald-400 bg-emerald-400/10 px-2 py-1 rounded">Normal</span>
+                        </div>
+                        <div class="flex items-end gap-2 mb-2">
+                            <span class="text-2xl font-bold text-white">45.2</span>
+                            <span class="text-slate-500 font-medium mb-1">%</span>
+                        </div>
+                        <div class="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
+                            <div class="h-full bg-blue-500 rounded-full w-[45%]"></div>
+                        </div>
+                    </div>
+
+                    <!-- RAM Card -->
+                    <div class="bg-slate-900 border border-slate-800 rounded-xl p-5">
+                        <div class="flex justify-between items-center mb-4">
+                            <div class="flex items-center gap-2 text-slate-400">
+                                <i class="fa-solid fa-memory"></i>
+                                <span class="text-sm font-medium">Memory</span>
+                            </div>
+                            <span
+                                class="text-xs font-semibold text-amber-400 bg-amber-400/10 px-2 py-1 rounded">High</span>
+                        </div>
+                        <div class="flex items-end gap-2 mb-2">
+                            <span class="text-2xl font-bold text-white">6.2</span>
+                            <span class="text-slate-500 font-medium mb-1">/ 8.0 GB</span>
+                        </div>
+                        <div class="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
+                            <div class="h-full bg-amber-500 rounded-full w-[77%]"></div>
+                        </div>
+                    </div>
+
+                    <!-- Storage Card -->
+                    <div class="bg-slate-900 border border-slate-800 rounded-xl p-5">
+                        <div class="flex justify-between items-center mb-4">
+                            <div class="flex items-center gap-2 text-slate-400">
+                                <i class="fa-solid fa-hard-drive"></i>
+                                <span class="text-sm font-medium">Storage (NVMe)</span>
+                            </div>
+                        </div>
+                        <div class="flex items-end gap-2 mb-2">
+                            <span class="text-2xl font-bold text-white">12.4</span>
+                            <span class="text-slate-500 font-medium mb-1">/ 25.0 GB</span>
+                        </div>
+                        <div class="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
+                            <div class="h-full bg-indigo-500 rounded-full w-[49%]"></div>
+                        </div>
+                    </div>
+
+                    <!-- Network Card -->
+                    <div class="bg-slate-900 border border-slate-800 rounded-xl p-5">
+                        <div class="flex justify-between items-center mb-4">
+                            <div class="flex items-center gap-2 text-slate-400">
+                                <i class="fa-solid fa-network-wired"></i>
+                                <span class="text-sm font-medium">Network</span>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-2 gap-4 mt-2">
+                            <div>
+                                <span class="text-xs text-slate-500 block mb-1">Inbound <i
+                                        class="fa-solid fa-arrow-down text-emerald-500"></i></span>
+                                <span class="text-lg font-bold text-white">2.1 <span
+                                        class="text-xs text-slate-500 font-normal">MB/s</span></span>
+                            </div>
+                            <div>
+                                <span class="text-xs text-slate-500 block mb-1">Outbound <i
+                                        class="fa-solid fa-arrow-up text-blue-500"></i></span>
+                                <span class="text-lg font-bold text-white">1.4 <span
+                                        class="text-xs text-slate-500 font-normal">MB/s</span></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Live Console Card -->
+                <div class="bg-[#0c0c0e] border border-slate-800 rounded-xl flex flex-col shadow-2xl h-[450px]">
+                    <!-- Console Header -->
+                    <div
+                        class="px-4 py-3 border-b border-slate-800 flex justify-between items-center bg-slate-900/50 rounded-t-xl">
+                        <div class="flex items-center gap-2">
+                            <i class="fa-solid fa-terminal text-slate-400"></i>
+                            <h3 class="font-medium text-slate-200 text-sm">Live Server Console</h3>
+                        </div>
+                        <div class="flex gap-2">
+                            <button class="text-slate-400 hover:text-white transition-colors" title="Auto-Scroll"><i
+                                    class="fa-solid fa-arrow-down-up-lock text-sm"></i></button>
+                            <button class="text-slate-400 hover:text-white transition-colors" title="Pop out"><i
+                                    class="fa-solid fa-up-right-from-square text-sm"></i></button>
+                        </div>
+                    </div>
+
+                    <!-- Console Output (Scrollable) -->
+                    <div id="terminal-output"
+                        class="flex-1 p-4 font-mono text-[13px] leading-relaxed text-slate-300 overflow-y-auto terminal-scroll whitespace-pre-wrap break-all">
+                        <!-- Logs injected by JS -->
+                    </div>
+
+                    <!-- Console Input -->
+                    <form id="console-form" class="border-t border-slate-800 p-2 flex bg-slate-900/50 rounded-b-xl">
+                        <div
+                            class="flex-1 flex items-center bg-[#0c0c0e] border border-slate-700 rounded-md overflow-hidden focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500 transition-all">
+                            <span class="pl-3 text-slate-500 font-mono text-sm">></span>
+                            <input type="text" id="console-input"
+                                placeholder="Type a server command (e.g., 'say Hello', 'time set day')"
+                                class="w-full bg-transparent border-none text-slate-200 font-mono text-sm px-3 py-2.5 focus:outline-none placeholder-slate-600"
+                                autocomplete="off">
+                        </div>
+                        <button type="submit"
+                            class="ml-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-md text-sm font-medium transition-colors border border-slate-700">
+                            Send
+                        </button>
+                    </form>
+                </div>
+
+            </div>
+
+            <!-- CONSOLE PAGE (Full Screen) -->
+            <div id="page-console" class="page-section max-w-7xl mx-auto h-[calc(100vh-8rem)] hidden">
+                <div class="bg-[#0c0c0e] border border-slate-800 rounded-xl flex flex-col shadow-2xl h-full">
+                    <!-- Console Header -->
+                    <div
+                        class="px-4 py-3 border-b border-slate-800 flex justify-between items-center bg-slate-900/50 rounded-t-xl">
+                        <div class="flex items-center gap-2">
+                            <i class="fa-solid fa-terminal text-slate-400"></i>
+                            <h3 class="font-medium text-slate-200 text-sm">Full Server Console</h3>
+                        </div>
+                    </div>
+
+                    <!-- Console Output -->
+                    <div id="terminal-output-full"
+                        class="flex-1 p-4 font-mono text-[13px] leading-relaxed text-slate-300 overflow-y-auto terminal-scroll whitespace-pre-wrap break-all">
+                    </div>
+
+                    <!-- Console Input -->
+                    <form id="console-form-full"
+                        class="border-t border-slate-800 p-2 flex bg-slate-900/50 rounded-b-xl">
+                        <div
+                            class="flex-1 flex items-center bg-[#0c0c0e] border border-slate-700 rounded-md overflow-hidden focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500 transition-all">
+                            <span class="pl-3 text-slate-500 font-mono text-sm">></span>
+                            <input type="text" id="console-input-full" placeholder="Type a server command..."
+                                class="w-full bg-transparent border-none text-slate-200 font-mono text-sm px-3 py-2.5 focus:outline-none placeholder-slate-600"
+                                autocomplete="off">
+                        </div>
+                        <button type="submit"
+                            class="ml-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-md text-sm font-medium transition-colors border border-slate-700">Send</button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- FILE MANAGER PAGE -->
+            <div id="page-filemanager" class="page-section max-w-7xl mx-auto space-y-6 hidden">
+                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                    <div
+                        class="flex items-center gap-2 text-sm text-slate-400 bg-slate-900 px-4 py-2 rounded-lg border border-slate-800 w-full sm:w-auto overflow-x-auto">
+                        <i class="fa-solid fa-house hover:text-white cursor-pointer transition-colors"></i> <span
+                            class="text-slate-600">/</span>
+                        <span class="hover:text-white cursor-pointer transition-colors">home</span> <span
+                            class="text-slate-600">/</span>
+                        <span class="hover:text-white cursor-pointer transition-colors">container</span>
+                    </div>
+                    <div class="flex gap-2 w-full sm:w-auto">
+                        <button
+                            class="flex-1 sm:flex-none px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-sm font-medium transition-colors border border-slate-700"><i
+                                class="fa-solid fa-folder-plus mr-2"></i>New Folder</button>
+                        <button
+                            class="flex-1 sm:flex-none px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-medium transition-colors shadow-lg shadow-blue-500/20"><i
+                                class="fa-solid fa-upload mr-2"></i>Upload</button>
+                    </div>
+                </div>
+                <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left border-collapse min-w-[600px]">
+                            <thead>
+                                <tr
+                                    class="bg-slate-800/50 text-slate-400 text-xs uppercase tracking-wider border-b border-slate-800">
+                                    <th class="p-4 font-medium">Name</th>
+                                    <th class="p-4 font-medium">Size</th>
+                                    <th class="p-4 font-medium">Modified</th>
+                                    <th class="p-4 font-medium text-right">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody class="text-sm text-slate-300 divide-y divide-slate-800/50">
+                                <tr class="hover:bg-slate-800/30 transition-colors group cursor-pointer">
+                                    <td class="p-4 flex items-center gap-3"><i
+                                            class="fa-solid fa-folder text-blue-400 text-lg"></i> <span
+                                            class="font-medium group-hover:text-blue-400 transition-colors">plugins</span>
+                                    </td>
+                                    <td class="p-4 text-slate-500">-</td>
+                                    <td class="p-4 text-slate-500">Oct 24, 2023</td>
+                                    <td class="p-4 text-right"><button class="text-slate-500 hover:text-white"><i
+                                                class="fa-solid fa-ellipsis-vertical px-2"></i></button></td>
+                                </tr>
+                                <tr class="hover:bg-slate-800/30 transition-colors group cursor-pointer">
+                                    <td class="p-4 flex items-center gap-3"><i
+                                            class="fa-solid fa-folder text-blue-400 text-lg"></i> <span
+                                            class="font-medium group-hover:text-blue-400 transition-colors">world</span>
+                                    </td>
+                                    <td class="p-4 text-slate-500">-</td>
+                                    <td class="p-4 text-slate-500">Oct 25, 2023</td>
+                                    <td class="p-4 text-right"><button class="text-slate-500 hover:text-white"><i
+                                                class="fa-solid fa-ellipsis-vertical px-2"></i></button></td>
+                                </tr>
+                                <tr class="hover:bg-slate-800/30 transition-colors group cursor-pointer">
+                                    <td class="p-4 flex items-center gap-3"><i
+                                            class="fa-regular fa-file-lines text-slate-400 text-lg"></i> <span
+                                            class="font-medium group-hover:text-blue-400 transition-colors">server.properties</span>
+                                    </td>
+                                    <td class="p-4 text-slate-500">1.2 KB</td>
+                                    <td class="p-4 text-slate-500">Oct 25, 2023</td>
+                                    <td class="p-4 text-right"><button class="text-slate-500 hover:text-white"><i
+                                                class="fa-solid fa-ellipsis-vertical px-2"></i></button></td>
+                                </tr>
+                                <tr class="hover:bg-slate-800/30 transition-colors group cursor-pointer">
+                                    <td class="p-4 flex items-center gap-3"><i
+                                            class="fa-solid fa-file-code text-slate-400 text-lg"></i> <span
+                                            class="font-medium group-hover:text-blue-400 transition-colors">spigot.yml</span>
+                                    </td>
+                                    <td class="p-4 text-slate-500">3.4 KB</td>
+                                    <td class="p-4 text-slate-500">Oct 24, 2023</td>
+                                    <td class="p-4 text-right"><button class="text-slate-500 hover:text-white"><i
+                                                class="fa-solid fa-ellipsis-vertical px-2"></i></button></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- PLAYERS PAGE -->
+            <div id="page-players" class="page-section max-w-7xl mx-auto space-y-6 hidden">
+                <div class="flex justify-between items-center border-b border-slate-800 pb-4">
+                    <div class="flex gap-4 sm:gap-6 text-sm font-medium overflow-x-auto w-full">
+                        <button class="text-blue-400 border-b-2 border-blue-400 pb-4 -mb-4 whitespace-nowrap">Online
+                            (2)</button>
+                        <button
+                            class="text-slate-400 hover:text-slate-200 pb-4 -mb-4 transition-colors whitespace-nowrap">Whitelist</button>
+                        <button
+                            class="text-slate-400 hover:text-slate-200 pb-4 -mb-4 transition-colors whitespace-nowrap">Bans</button>
+                        <button
+                            class="text-slate-400 hover:text-slate-200 pb-4 -mb-4 transition-colors whitespace-nowrap">Operators</button>
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div
+                        class="bg-slate-900 border border-slate-800 rounded-xl p-4 flex items-center justify-between group">
+                        <div class="flex items-center gap-3">
+                            <img src="https://crafatar.com/avatars/853c80ef3c3749fdaa49938b674adae6?size=40&overlay"
+                                alt="Steve" class="w-10 h-10 rounded">
+                            <div>
+                                <h4 class="font-medium text-white">Notch</h4>
+                                <p class="text-xs text-slate-500">Ping: <span class="text-emerald-400">24ms</span></p>
+                            </div>
+                        </div>
+                        <div class="opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity flex gap-2">
+                            <button
+                                class="w-8 h-8 rounded bg-amber-500/10 text-amber-500 hover:bg-amber-500/20 flex items-center justify-center transition-colors"
+                                title="Kick"><i class="fa-solid fa-user-minus text-xs"></i></button>
+                            <button
+                                class="w-8 h-8 rounded bg-rose-500/10 text-rose-500 hover:bg-rose-500/20 flex items-center justify-center transition-colors"
+                                title="Ban"><i class="fa-solid fa-gavel text-xs"></i></button>
+                        </div>
+                    </div>
+                    <div
+                        class="bg-slate-900 border border-slate-800 rounded-xl p-4 flex items-center justify-between group">
+                        <div class="flex items-center gap-3">
+                            <img src="https://crafatar.com/avatars/606e2ff0ed7748429d6ce1d3321c7838?size=40&overlay"
+                                alt="Alex" class="w-10 h-10 rounded">
+                            <div>
+                                <h4 class="font-medium text-white">Jeb_</h4>
+                                <p class="text-xs text-slate-500">Ping: <span class="text-emerald-400">45ms</span></p>
+                            </div>
+                        </div>
+                        <div class="opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity flex gap-2">
+                            <button
+                                class="w-8 h-8 rounded bg-amber-500/10 text-amber-500 hover:bg-amber-500/20 flex items-center justify-center transition-colors"
+                                title="Kick"><i class="fa-solid fa-user-minus text-xs"></i></button>
+                            <button
+                                class="w-8 h-8 rounded bg-rose-500/10 text-rose-500 hover:bg-rose-500/20 flex items-center justify-center transition-colors"
+                                title="Ban"><i class="fa-solid fa-gavel text-xs"></i></button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- PLUGINS & STARTUP (Simple views) -->
+            <div id="page-plugins" class="page-section max-w-7xl mx-auto space-y-6 hidden">
+                <div
+                    class="bg-slate-900 border border-slate-800 rounded-xl p-10 text-center flex flex-col items-center justify-center">
+                    <i class="fa-solid fa-puzzle-piece text-5xl text-blue-500/50 mb-4"></i>
+                    <h2 class="text-xl font-bold text-white mb-2">Mod/Plugin Installer</h2>
+                    <p class="text-slate-400 max-w-md mx-auto mb-6">Browse and install Spigot plugins, CurseForge mods,
+                        and datapacks directly from the panel.</p>
+                    <button
+                        class="px-6 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-medium transition-colors shadow-lg shadow-blue-500/20">Browse
+                        Catalog</button>
+                </div>
+            </div>
+
+            <div id="page-startup" class="page-section max-w-7xl mx-auto space-y-6 hidden">
+                <div class="bg-slate-900 border border-slate-800 rounded-xl p-6">
+                    <h3 class="text-lg font-bold text-white mb-4 border-b border-slate-800 pb-2">Startup Command</h3>
+                    <div
+                        class="bg-[#0c0c0e] border border-slate-800 rounded-lg p-4 font-mono text-sm text-slate-300 break-all">
+                        java -Xms128M -Xmx{{SERVER_MEMORY}}M -Dterminal.jline=false -Dterminal.ansi=true -jar
+                        {{SERVER_JARFILE}}
+                    </div>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-6 mt-6">
+                        <div>
+                            <label class="block text-xs font-medium text-slate-500 uppercase tracking-wider mb-1">Server
+                                Jar File</label>
+                            <input type="text" value="server.jar"
+                                class="w-full bg-[#0c0c0e] border border-slate-800 rounded-lg px-3 py-2 text-slate-300 focus:outline-none focus:border-blue-500">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-slate-500 uppercase tracking-wider mb-1">Docker
+                                Image</label>
+                            <select
+                                class="w-full bg-[#0c0c0e] border border-slate-800 rounded-lg px-3 py-2 text-slate-300 focus:outline-none focus:border-blue-500">
+                                <option>ghcr.io/pterodactyl/yolks:java_17</option>
+                                <option>ghcr.io/pterodactyl/yolks:java_21</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- BACKUPS PAGE -->
+            <div id="page-backups" class="page-section max-w-7xl mx-auto space-y-6 hidden">
+                <div class="flex justify-between items-center">
+                    <div>
+                        <h2 class="text-lg font-bold text-white">Backups</h2>
+                        <p class="text-sm text-slate-400">Manage your server backups. (2/5 used)</p>
+                    </div>
+                    <button
+                        class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-medium transition-colors shadow-lg shadow-blue-500/20 hidden sm:flex items-center"><i
+                            class="fa-solid fa-plus mr-2"></i>Create</button>
+                </div>
+                <div class="space-y-4">
+                    <div
+                        class="bg-slate-900 border border-slate-800 rounded-xl p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                        <div class="flex items-center gap-4">
+                            <div
+                                class="w-10 h-10 rounded-full bg-emerald-500/10 text-emerald-500 flex items-center justify-center text-lg">
+                                <i class="fa-solid fa-check"></i></div>
+                            <div>
+                                <h4 class="font-medium text-white flex items-center gap-2">Pre-update backup <span
+                                        class="text-xs bg-slate-800 text-slate-400 px-2 py-0.5 rounded">auto</span></h4>
+                                <p class="text-xs text-slate-500 mt-0.5">Oct 25, 2023 at 04:00 AM • 452.1 MB</p>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-2 w-full sm:w-auto mt-2 sm:mt-0">
+                            <button
+                                class="flex-1 sm:flex-none px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-sm transition-colors"><i
+                                    class="fa-solid fa-clock-rotate-left sm:mr-1.5"></i><span
+                                    class="hidden sm:inline">Restore</span></button>
+                            <button
+                                class="flex-1 sm:flex-none px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-sm transition-colors"><i
+                                    class="fa-solid fa-download sm:mr-1.5"></i><span
+                                    class="hidden sm:inline">Download</span></button>
+                            <button
+                                class="px-3 py-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 rounded text-sm transition-colors"><i
+                                    class="fa-solid fa-trash"></i></button>
+                        </div>
+                    </div>
+                    <div
+                        class="bg-slate-900 border border-slate-800 rounded-xl p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                        <div class="flex items-center gap-4">
+                            <div
+                                class="w-10 h-10 rounded-full bg-emerald-500/10 text-emerald-500 flex items-center justify-center text-lg">
+                                <i class="fa-solid fa-check"></i></div>
+                            <div>
+                                <h4 class="font-medium text-white flex items-center gap-2">Manual Save <span
+                                        class="text-xs bg-slate-800 text-slate-400 px-2 py-0.5 rounded">user</span></h4>
+                                <p class="text-xs text-slate-500 mt-0.5">Oct 20, 2023 at 18:30 PM • 410.5 MB</p>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-2 w-full sm:w-auto mt-2 sm:mt-0">
+                            <button
+                                class="flex-1 sm:flex-none px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-sm transition-colors"><i
+                                    class="fa-solid fa-clock-rotate-left sm:mr-1.5"></i><span
+                                    class="hidden sm:inline">Restore</span></button>
+                            <button
+                                class="flex-1 sm:flex-none px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-sm transition-colors"><i
+                                    class="fa-solid fa-download sm:mr-1.5"></i><span
+                                    class="hidden sm:inline">Download</span></button>
+                            <button
+                                class="px-3 py-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 rounded text-sm transition-colors"><i
+                                    class="fa-solid fa-trash"></i></button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SETTINGS PAGE -->
+            <div id="page-settings" class="page-section max-w-7xl mx-auto space-y-6 hidden">
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div class="bg-slate-900 border border-slate-800 rounded-xl p-6">
+                        <h3 class="text-lg font-bold text-white mb-4 border-b border-slate-800 pb-2">SFTP Details</h3>
+                        <div class="space-y-4">
+                            <div>
+                                <label
+                                    class="block text-xs font-medium text-slate-500 uppercase tracking-wider mb-1">Server
+                                    Address</label>
+                                <div class="flex items-center bg-[#0c0c0e] border border-slate-800 rounded-lg p-2.5">
+                                    <span
+                                        class="text-slate-300 font-mono text-sm flex-1">sftp.serverspace.host:2022</span>
+                                    <button class="text-slate-500 hover:text-white transition-colors"><i
+                                            class="fa-regular fa-copy"></i></button>
+                                </div>
+                            </div>
+                            <div>
+                                <label
+                                    class="block text-xs font-medium text-slate-500 uppercase tracking-wider mb-1">Username</label>
+                                <div class="flex items-center bg-[#0c0c0e] border border-slate-800 rounded-lg p-2.5">
+                                    <span class="text-slate-300 font-mono text-sm flex-1">admin.1204</span>
+                                    <button class="text-slate-500 hover:text-white transition-colors"><i
+                                            class="fa-regular fa-copy"></i></button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="bg-slate-900 border border-slate-800 rounded-xl p-6">
+                        <h3 class="text-lg font-bold text-rose-500 mb-4 border-b border-slate-800 pb-2">Danger Zone</h3>
+                        <div class="space-y-4">
+                            <div
+                                class="flex items-center justify-between p-4 border border-slate-800 rounded-lg bg-slate-800/20">
+                                <div>
+                                    <h4 class="font-medium text-white">Reinstall Server</h4>
+                                    <p class="text-xs text-slate-400 mt-1">Wipes current files and reinstalls OS.</p>
+                                </div>
+                                <button
+                                    class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-rose-400 rounded-lg text-sm font-medium transition-colors border border-slate-700">Reinstall</button>
+                            </div>
+                            <div
+                                class="flex items-center justify-between p-4 border border-rose-500/30 rounded-lg bg-rose-500/5">
+                                <div>
+                                    <h4 class="font-medium text-rose-400">Delete Server</h4>
+                                    <p class="text-xs text-slate-400 mt-1">Permanently deletes all data.</p>
+                                </div>
+                                <button
+                                    class="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-lg text-sm font-medium transition-colors shadow-lg shadow-rose-600/20">Delete</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <!-- Simple Script for interactivity -->
+    <script>
+        // Page Navigation Logic
+        function switchPage(pageId) {
+            // Hide all pages
+            const pages = document.querySelectorAll('.page-section');
+            pages.forEach(page => {
+                page.classList.remove('block');
+                page.classList.add('hidden');
+            });
+
+            // Show target page
+            const targetPage = document.getElementById('page-' + pageId);
+            if (targetPage) {
+                targetPage.classList.remove('hidden');
+                targetPage.classList.add('block');
+            }
+
+            // Update nav styles
+            const navLinks = document.querySelectorAll('.nav-link');
+            navLinks.forEach(link => {
+                link.classList.remove('bg-blue-600/10', 'text-blue-400');
+                link.classList.add('text-slate-400');
+            });
+
+            // Highlight active nav
+            const activeNav = document.getElementById('nav-' + pageId);
+            if (activeNav) {
+                activeNav.classList.remove('text-slate-400');
+                activeNav.classList.add('bg-blue-600/10', 'text-blue-400');
+            }
+        }
+
+        // Simple clipboard copy function for IP
+        function copyIP() {
+            // Using standard alert alternative for iframe environments
+            const originalText = document.activeElement.innerHTML;
+            const notification = document.createElement('div');
+            notification.className = 'fixed bottom-4 right-4 bg-emerald-500 text-white px-4 py-2 rounded shadow-lg z-50 text-sm font-medium transition-opacity duration-300';
+            notification.innerText = 'Server IP copied to clipboard!';
+            document.body.appendChild(notification);
+
+            setTimeout(() => {
+                notification.style.opacity = '0';
+                setTimeout(() => notification.remove(), 300);
+            }, 2000);
+        }
+
+        // Terminal Simulation Logic
+        const terminalOverview = document.getElementById('terminal-output');
+        const terminalFull = document.getElementById('terminal-output-full');
+        const formOverview = document.getElementById('console-form');
+        const formFull = document.getElementById('console-form-full');
+        const inputOverview = document.getElementById('console-input');
+        const inputFull = document.getElementById('console-input-full');
+
+        // Helper to format timestamps
+        const getTime = () => {
+            const now = new Date();
+            return `[${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}]`;
+        };
+
+        // Function to append lines to the terminal
+        const appendLog = (text, type = 'info') => {
+            let colorClass = 'text-slate-300'; // default info
+            if (type === 'warn') colorClass = 'text-amber-400';
+            if (type === 'error') colorClass = 'text-rose-400';
+            if (type === 'success') colorClass = 'text-emerald-400';
+            if (type === 'command') colorClass = 'text-blue-400 font-bold';
+
+            const htmlContent = `<span class="text-slate-500">${getTime()}</span> <span class="${colorClass}">${text}</span>`;
+
+            if (terminalOverview) {
+                const lineO = document.createElement('div');
+                lineO.className = 'mb-1';
+                lineO.innerHTML = htmlContent;
+                terminalOverview.appendChild(lineO);
+                terminalOverview.scrollTop = terminalOverview.scrollHeight;
+            }
+
+            if (terminalFull) {
+                const lineF = document.createElement('div');
+                lineF.className = 'mb-1';
+                lineF.innerHTML = htmlContent;
+                terminalFull.appendChild(lineF);
+                terminalFull.scrollTop = terminalFull.scrollHeight;
+            }
+        };
+
+        // Simulated startup sequence
+        const startupLogs = [
+            { text: "[Server thread/INFO]: Starting minecraft server version 1.20.4", delay: 500 },
+            { text: "[Server thread/INFO]: Loading properties", delay: 1000 },
+            { text: "[Server thread/INFO]: Default game type: SURVIVAL", delay: 1200 },
+            { text: "[Server thread/INFO]: Generating keypair", delay: 1500 },
+            { text: "[Server thread/INFO]: Starting Minecraft server on *:25565", delay: 2000 },
+            { text: "[Server thread/INFO]: Using default channel type", delay: 2100 },
+            { text: "[Server thread/WARN]: **** SERVER IS RUNNING IN OFFLINE/INSECURE MODE!", type: 'warn', delay: 2500 },
+            { text: "[Server thread/INFO]: Preparing level \"world\"", delay: 3000 },
+            { text: "[Server thread/INFO]: Preparing start region for dimension minecraft:overworld", delay: 3500 },
+            { text: "[Server thread/INFO]: Time elapsed: 1452 ms", delay: 4000 },
+            { text: "[Server thread/INFO]: Done (4.234s)! For help, type \"help\"", type: 'success', delay: 4200 },
+            { text: "[Server thread/INFO]: Player Steve connected with ip 192.168.1.100", delay: 7000 },
+            { text: "[Server thread/INFO]: Steve joined the game", delay: 7100 },
+        ];
+
+        // Run startup sequence
+        let totalDelay = 0;
+        startupLogs.forEach(log => {
+            totalDelay = log.delay;
+            setTimeout(() => {
+                appendLog(log.text, log.type || 'info');
+            }, totalDelay);
+        });
+
+        // Handle user commands logic
+        const processCommand = (val, inputField) => {
+            if (!val) return;
+
+            // Echo command
+            appendLog(`> ${val}`, 'command');
+            inputField.value = '';
+
+            // Simulate generic server response
+            setTimeout(() => {
+                if (val.toLowerCase() === 'help') {
+                    appendLog("[Server thread/INFO]: --- Showing help page 1 of 4 ---");
+                    appendLog("[Server thread/INFO]: /ban <player> - Bans a player from the server");
+                    appendLog("[Server thread/INFO]: /kick <player> - Kicks a player from the server");
+                    appendLog("[Server thread/INFO]: /say <message> - Broadcasts a message");
+                } else if (val.toLowerCase().startsWith('say ')) {
+                    const msg = val.substring(4);
+                    appendLog(`[Server thread/INFO]: [Server] ${msg}`, 'success');
+                } else {
+                    appendLog(`[Server thread/INFO]: Unknown command. Type "help" for help.`, 'warn');
+                }
+            }, 300);
+        };
+
+        if (formOverview) {
+            formOverview.addEventListener('submit', (e) => {
+                e.preventDefault();
+                processCommand(inputOverview.value.trim(), inputOverview);
+            });
+        }
+
+        if (formFull) {
+            formFull.addEventListener('submit', (e) => {
+                e.preventDefault();
+                processCommand(inputFull.value.trim(), inputFull);
+            });
+        }
+    </script>
+</body>
+
+</html>

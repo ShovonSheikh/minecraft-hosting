@@ -39,6 +39,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         running: false, playerCount: 0, version: null,
     });
     const [mobileOpen, setMobileOpen] = useState(false);
+    const [domainConfig, setDomainConfig] = useState<{ serverIp: string; serverPort: number } | null>(null);
 
     const fetchStatus = useCallback(async () => {
         try {
@@ -48,14 +49,27 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         } catch { /* */ }
     }, []);
 
+    const fetchDomain = useCallback(async () => {
+        try {
+            const res = await fetch("/api/server/domains");
+            const data = await res.json();
+            setDomainConfig(data.config);
+        } catch { /* */ }
+    }, []);
+
     useEffect(() => {
         fetchStatus();
+        fetchDomain();
         const i = setInterval(fetchStatus, 5000);
         return () => clearInterval(i);
-    }, [fetchStatus]);
+    }, [fetchStatus, fetchDomain]);
 
     // Auto-close mobile drawer on route change
     useEffect(() => { setMobileOpen(false); }, [pathname]);
+
+    const connectionAddr = domainConfig?.serverIp
+        ? `${domainConfig.serverIp}${domainConfig.serverPort !== 25565 ? `:${domainConfig.serverPort}` : ""}`
+        : null;
 
     return (
         <div className="app-shell">
@@ -117,7 +131,39 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
                 <div className="sidebar-footer">MCPanel v3.0</div>
             </aside>
-            <main className="main-content">{children}</main>
+
+            <main className="main-content">
+                {/* ── Top Header Bar (Reference-style) ── */}
+                <div className="top-header">
+                    <div className="top-header-left">
+                        <span className="top-header-title">Minecraft Server</span>
+                        <span className="top-header-separator">•</span>
+                        <div className="top-header-status">
+                            <div className={`status-dot ${status.running ? "on" : "off"}`} />
+                            <span style={{ color: status.running ? "var(--teal)" : "var(--coral)", fontWeight: 600 }}>
+                                {status.running ? "Online" : "Offline"}
+                            </span>
+                        </div>
+                        {connectionAddr && (
+                            <>
+                                <span className="top-header-separator">•</span>
+                                <span className="top-header-ip" onClick={() => {
+                                    navigator.clipboard?.writeText(connectionAddr);
+                                }}>
+                                    {connectionAddr} 📋
+                                </span>
+                            </>
+                        )}
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                        <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-muted)" }}>
+                            {status.version || ""}
+                        </span>
+                    </div>
+                </div>
+
+                {children}
+            </main>
         </div>
     );
 }

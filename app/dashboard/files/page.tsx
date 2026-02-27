@@ -3,12 +3,15 @@
 import { useState, useEffect, useCallback } from "react";
 
 interface FileItem { name: string; path: string; isDirectory: boolean; size: number; }
-function fmtSize(b: number): string { if (b === 0) return "0"; const kb = b / 1024; return kb >= 1024 ? `${(kb / 1024).toFixed(1)} MB` : `${kb.toFixed(0)} KB`; }
-function icon(name: string, isDir: boolean): string {
-    if (isDir) return "📁";
+function fmtSize(b: number): string { if (b === 0) return "0 KB"; const kb = b / 1024; return kb >= 1024 ? `${(kb / 1024).toFixed(1)} MB` : `${kb.toFixed(0)} KB`; }
+
+function FileIcon({ name, isDir }: { name: string, isDir: boolean }) {
+    if (isDir) return <i className="fa-solid fa-folder text-[#4299E1] text-lg"></i>;
     const ext = name.split(".").pop()?.toLowerCase() || "";
-    const m: Record<string, string> = { jar: "☕", json: "{ }", yml: "📋", yaml: "📋", properties: "⚙", txt: "📝", log: "📊", toml: "📋", xml: "📐", png: "🖼", jpg: "🖼", dat: "💾" };
-    return m[ext] || "📄";
+    if (ext === "json" || ext === "yml" || ext === "yaml") return <i className="fa-solid fa-file-code text-[#B9C1D1] text-lg"></i>;
+    if (ext === "properties" || ext === "txt" || ext === "log") return <i className="fa-regular fa-file-lines text-[#828D9F] text-lg"></i>;
+    if (ext === "jar") return <i className="fa-solid fa-mug-hot text-[#F8B84E] text-lg"></i>;
+    return <i className="fa-solid fa-file text-[#828D9F] text-lg"></i>;
 }
 
 export default function FilesPage() {
@@ -23,7 +26,11 @@ export default function FilesPage() {
     const msg = (m: string) => { setToast(m); setTimeout(() => setToast(null), 3500); };
 
     const fetchDir = useCallback(async (p: string = "") => {
-        try { const d = await (await fetch(`/api/server/files?path=${encodeURIComponent(p)}`)).json(); setFiles(d.files || []); setCurPath(p); } catch { /* */ }
+        try {
+            const d = await (await fetch(`/api/server/files?path=${encodeURIComponent(p)}`)).json();
+            setFiles(d.files || []);
+            setCurPath(p);
+        } catch { /* */ }
         finally { setLoading(false); }
     }, []);
 
@@ -39,8 +46,13 @@ export default function FilesPage() {
     const save = async () => {
         if (!selFile) return;
         setSaving(true);
-        try { const d = await (await fetch("/api/server/files", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ path: selFile, content }) })).json(); msg(d.message); if (d.success) setOrig(content); }
-        catch { msg("Failed"); } finally { setSaving(false); }
+        try {
+            const d = await (await fetch("/api/server/files", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ path: selFile, content }) })).json();
+            msg(d.message);
+            if (d.success) setOrig(content);
+        }
+        catch { msg("Failed"); }
+        finally { setSaving(false); }
     };
 
     const nav = (p: string) => { setSelFile(null); setContent(""); fetchDir(p); };
@@ -48,50 +60,116 @@ export default function FilesPage() {
     const crumbs = curPath.split("/").filter(Boolean);
     const changed = content !== orig;
 
-    if (loading) return <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "60vh" }}><div className="spinner spinner-lg" /></div>;
+    if (loading) return <div className="flex items-center justify-center h-[60vh]"><i className="fa-solid fa-circle-notch fa-spin text-3xl text-[#F8B84E]"></i></div>;
 
     return (
-        <>
-            <div className="page-header"><h2 className="page-title">Files</h2><p className="page-subtitle">Browse & edit server files</p></div>
-
-            <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 16, fontFamily: "var(--font-mono)", fontSize: 13, color: "var(--text-muted)" }}>
-                <span style={{ cursor: "pointer", color: "var(--amber)" }} onClick={() => nav("")}>minecraft</span>
-                {crumbs.map((c, i) => <span key={i}><span style={{ margin: "0 3px" }}>/</span><span style={{ cursor: "pointer", color: i === crumbs.length - 1 ? "var(--text-primary)" : "var(--amber)" }} onClick={() => nav(crumbs.slice(0, i + 1).join("/"))}>{c}</span></span>)}
+        <div id="page-filemanager" className="page-section max-w-7xl mx-auto space-y-6 block">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                <div className="flex items-center gap-2 text-sm text-[#828D9F] bg-[#1A1D24] px-4 py-2 rounded-lg border border-[#333947] w-full sm:w-auto overflow-x-auto">
+                    <i className="fa-solid fa-house hover:text-[#FFFFFF] cursor-pointer transition-colors" onClick={() => nav("")}></i>
+                    {crumbs.length > 0 && <span className="text-[#333947]">/</span>}
+                    {crumbs.map((c, i) => (
+                        <span key={i} className="flex items-center gap-2">
+                            <span
+                                className="hover:text-[#FFFFFF] cursor-pointer transition-colors"
+                                onClick={() => nav(crumbs.slice(0, i + 1).join("/"))}
+                            >
+                                {c}
+                            </span>
+                            {i < crumbs.length - 1 && <span className="text-[#333947]">/</span>}
+                        </span>
+                    ))}
+                </div>
+                <div className="flex gap-2 w-full sm:w-auto">
+                    <button className="flex-1 sm:flex-none px-4 py-2 bg-[#1A1D24] hover:bg-[#1A1D24]/80 text-[#FFFFFF] rounded-lg text-sm font-medium transition-colors border border-[#333947]">
+                        <i className="fa-solid fa-folder-plus mr-2"></i>New Folder
+                    </button>
+                    <button className="flex-1 sm:flex-none px-4 py-2 bg-[#4299E1] hover:bg-[#4299E1]/80 text-[#FFFFFF] rounded-lg text-sm font-medium transition-colors shadow-lg shadow-[#4299E1]/20">
+                        <i className="fa-solid fa-upload mr-2"></i>Upload
+                    </button>
+                </div>
             </div>
 
-            <div className="file-split">
-                <div className="file-tree">
-                    {curPath && <div className="file-row" onClick={up}><span className="f-icon">↩</span><span className="f-name">..</span></div>}
-                    {files.map(f => (
-                        <div key={f.path} className={`file-row ${selFile === f.path ? "active" : ""}`} onClick={() => f.isDirectory ? nav(f.path) : open(f.path)}>
-                            <span className="f-icon">{icon(f.name, f.isDirectory)}</span>
-                            <span className="f-name">{f.name}</span>
-                            {!f.isDirectory && <span className="f-size">{fmtSize(f.size)}</span>}
-                        </div>
-                    ))}
-                    {files.length === 0 && <div style={{ padding: 16, textAlign: "center", color: "var(--text-muted)", fontSize: 13 }}>Empty</div>}
+            <div className="bg-[#1A1D24] border border-[#333947] rounded-xl overflow-hidden flex flex-col md:flex-row min-h-[500px]">
+                {/* File List */}
+                <div className="md:w-1/3 xl:w-1/4 border-r border-[#333947] overflow-y-auto max-h-[600px]">
+                    <table className="w-full text-left border-collapse">
+                        <tbody className="text-sm text-[#B9C1D1] divide-y divide-[#333947]/50">
+                            {curPath && (
+                                <tr className="hover:bg-[#1A1D24]/70 transition-colors group cursor-pointer" onClick={up}>
+                                    <td className="p-3 flex items-center gap-3">
+                                        <i className="fa-solid fa-level-up-alt text-[#828D9F] text-lg"></i>
+                                        <span className="font-medium group-hover:text-[#F8B84E] transition-colors">..</span>
+                                    </td>
+                                    <td className="p-3 text-right"></td>
+                                </tr>
+                            )}
+                            {files.map((f) => (
+                                <tr key={f.path} className={`hover:bg-[#1A1D24]/70 transition-colors group cursor-pointer ${selFile === f.path ? "bg-[#1A1D24]/90 border-l-2 border-[#F8B84E]" : ""}`} onClick={() => f.isDirectory ? nav(f.path) : open(f.path)}>
+                                    <td className="p-3 flex items-center gap-3 overflow-hidden">
+                                        <FileIcon name={f.name} isDir={f.isDirectory} />
+                                        <span className="font-medium group-hover:text-[#F8B84E] transition-colors truncate">{f.name}</span>
+                                    </td>
+                                    <td className="p-3 text-right text-xs text-[#828D9F] whitespace-nowrap">
+                                        {!f.isDirectory ? fmtSize(f.size) : "-"}
+                                    </td>
+                                </tr>
+                            ))}
+                            {files.length === 0 && (
+                                <tr><td colSpan={2} className="p-6 text-center text-[#828D9F] italic">Empty directory</td></tr>
+                            )}
+                        </tbody>
+                    </table>
                 </div>
 
-                <div className="file-editor">
+                {/* File Editor */}
+                <div className="flex-1 flex flex-col bg-[#090A0C]">
                     {selFile ? (
                         <>
-                            <div className="file-editor-bar">
-                                <span className="fe-path">{selFile}</span>
-                                <div className="btn-row">
-                                    {changed && <button className="btn btn-outline btn-sm" onClick={() => setContent(orig)}>Discard</button>}
-                                    <button className="btn btn-primary btn-sm" onClick={save} disabled={!changed || saving}>{saving ? <span className="spinner" /> : "Save"}</button>
+                            <div className="px-4 py-3 border-b border-[#333947] flex justify-between items-center bg-[#1A1D24]/50">
+                                <div className="flex items-center gap-2">
+                                    <FileIcon name={selFile.split('/').pop() || ""} isDir={false} />
+                                    <span className="font-medium text-sm text-[#FFFFFF]">{selFile.split('/').pop()}</span>
+                                    {changed && <span className="text-xs bg-[#F8B84E]/10 text-[#F8B84E] px-2 py-0.5 rounded ml-2">Unsaved</span>}
+                                </div>
+                                <div className="flex gap-2">
+                                    {changed && (
+                                        <button onClick={() => setContent(orig)} className="px-3 py-1.5 text-xs font-medium text-[#828D9F] hover:text-[#FFFFFF] transition-colors">
+                                            Discard
+                                        </button>
+                                    )}
+                                    <button
+                                        onClick={save}
+                                        disabled={!changed || saving}
+                                        className="px-3 py-1.5 bg-[#4299E1] hover:bg-[#4299E1]/80 text-[#FFFFFF] rounded text-xs font-medium transition-colors disabled:opacity-50 flex items-center gap-2"
+                                    >
+                                        {saving ? <i className="fa-solid fa-circle-notch fa-spin"></i> : <i className="fa-solid fa-floppy-disk"></i>}
+                                        Save
+                                    </button>
                                 </div>
                             </div>
-                            <textarea value={content} onChange={e => setContent(e.target.value)} spellCheck={false} />
+                            <textarea
+                                value={content}
+                                onChange={e => setContent(e.target.value)}
+                                spellCheck={false}
+                                className="flex-1 w-full bg-transparent text-[#B9C1D1] font-mono text-sm p-4 focus:outline-none resize-none"
+                            />
                         </>
                     ) : (
-                        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", color: "var(--text-muted)", fontFamily: "var(--font-mono)", fontSize: 13 }}>Select a file to edit</div>
+                        <div className="flex-1 flex flex-col items-center justify-center text-[#828D9F]">
+                            <i className="fa-solid fa-file-code text-4xl mb-3 opacity-20"></i>
+                            <span className="text-sm">Select a file from the sidebar to edit</span>
+                        </div>
                     )}
                 </div>
             </div>
 
-            {changed && <div className="unsaved-bar"><span>⚠ Unsaved changes</span><button className="btn btn-outline btn-sm" onClick={() => setContent(orig)}>Discard</button><button className="btn btn-primary btn-sm" onClick={save} disabled={saving}>Save</button></div>}
-            {toast && <div className="toast">{toast}</div>}
-        </>
+            {toast && (
+                <div className="fixed bottom-6 right-6 bg-[#1A1D24] border border-[#333947] shadow-xl text-[#FFFFFF] px-4 py-3 rounded-lg flex items-center gap-3 animate-fade-in z-50">
+                    <i className="fa-solid fa-bell text-[#F8B84E]"></i>
+                    <span className="text-sm font-medium">{toast}</span>
+                </div>
+            )}
+        </div>
     );
 }

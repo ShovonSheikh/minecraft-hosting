@@ -19,64 +19,108 @@ export default function PlayersPage() {
     const act = async (p: string, a: string, label: string) => {
         setBusy(`${p}-${a}`);
         const cmds: Record<string, string> = { kick: `kick ${p}`, ban: `ban ${p}`, op: `op ${p}`, deop: `deop ${p}` };
-        try { await fetch("/api/server/command", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ command: cmds[a] }) }); msg(`${label}: ${p}`); setTimeout(poll, 2000); }
-        catch { msg("Failed"); } finally { setBusy(null); }
+        try {
+            await fetch("/api/server/command", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ command: cmds[a] }) });
+            msg(`${label}: ${p}`);
+            setTimeout(poll, 2000);
+        }
+        catch { msg("Failed"); }
+        finally { setBusy(null); }
     };
 
-    if (loading) return <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "60vh" }}><div className="spinner spinner-lg" /></div>;
+    if (loading) return <div className="flex items-center justify-center h-[60vh]"><i className="fa-solid fa-circle-notch fa-spin text-3xl text-[#F8B84E]"></i></div>;
     const on = status?.running ?? false, players = status?.players ?? [];
 
     return (
-        <>
-            <div className="page-header">
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                    <div><h2 className="page-title">Players</h2><p className="page-subtitle">Manage connected players</p></div>
-                    <span className={`badge ${on ? "badge-on" : "badge-off"}`}>{players.length} / 20</span>
+        <div id="page-players" className="page-section max-w-7xl mx-auto space-y-6 block">
+            <div className="flex justify-between items-center border-b border-[#333947] pb-4">
+                <div className="flex gap-4 sm:gap-6 text-sm font-medium overflow-x-auto w-full">
+                    <button className="text-[#4299E1] border-b-2 border-[#4299E1] pb-4 -mb-4 whitespace-nowrap">
+                        Online ({players.length})
+                    </button>
+                    <button className="text-[#828D9F] hover:text-[#FFFFFF] pb-4 -mb-4 transition-colors whitespace-nowrap">Whitelist</button>
+                    <button className="text-[#828D9F] hover:text-[#FFFFFF] pb-4 -mb-4 transition-colors whitespace-nowrap">Bans</button>
+                    <button className="text-[#828D9F] hover:text-[#FFFFFF] pb-4 -mb-4 transition-colors whitespace-nowrap">Operators</button>
                 </div>
             </div>
 
             {!on ? (
-                <div className="card"><div className="empty"><div className="empty-icon">⏸</div><h3>Server Offline</h3><p>Start the server to manage players.</p></div></div>
+                <div className="bg-[#1A1D24] border border-[#333947] rounded-xl p-12 flex flex-col items-center justify-center text-center">
+                    <i className="fa-solid fa-pause text-4xl text-[#828D9F] mb-4 opacity-50"></i>
+                    <h3 className="text-lg font-medium text-[#FFFFFF] mb-1">Server Offline</h3>
+                    <p className="text-sm text-[#828D9F]">Start the server to manage players.</p>
+                </div>
             ) : players.length === 0 ? (
-                <div className="card"><div className="empty"><div className="empty-icon">◌</div><h3>No Players</h3><p>Players will appear when they connect.</p></div></div>
+                <div className="bg-[#1A1D24] border border-[#333947] rounded-xl p-12 flex flex-col items-center justify-center text-center">
+                    <i className="fa-solid fa-users text-4xl text-[#828D9F] mb-4 opacity-50"></i>
+                    <h3 className="text-lg font-medium text-[#FFFFFF] mb-1">No Players Online</h3>
+                    <p className="text-sm text-[#828D9F]">Players will appear here when they connect.</p>
+                </div>
             ) : (
-                <div className="card" style={{ padding: 0, overflow: "hidden" }}>
-                    <table className="table">
-                        <thead><tr><th>Player</th><th style={{ textAlign: "right" }}>Actions</th></tr></thead>
-                        <tbody>{players.map(n => (
-                            <tr key={n}>
-                                <td>
-                                    <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                                        <img className="avatar" src={`https://mc-heads.net/avatar/${n}/32`} alt={n} width={32} height={32} />
-                                        <div><div style={{ fontWeight: 700, fontSize: 14 }}>{n}</div><div style={{ fontSize: 11, color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>online</div></div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {players.map(n => (
+                        <div key={n} className="bg-[#1A1D24] border border-[#333947] rounded-xl p-4 flex items-center justify-between group">
+                            <div className="flex items-center gap-3">
+                                <img src={`https://mc-heads.net/avatar/${n}/40`} alt={n} className="w-10 h-10 rounded shadow-sm" />
+                                <div>
+                                    <div className="font-medium text-[#FFFFFF]">{n}</div>
+                                    <div className="text-xs text-[#828D9F] flex items-center gap-1 mt-0.5">
+                                        <span className="w-1.5 h-1.5 rounded-full bg-[#10B981]"></span> Online
                                     </div>
-                                </td>
-                                <td style={{ textAlign: "right" }}>
-                                    <div className="btn-row" style={{ justifyContent: "flex-end" }}>
-                                        <button className="btn btn-outline btn-sm" disabled={busy !== null} onClick={() => act(n, "op", "Opped")}>👑 OP</button>
-                                        <button className="btn btn-outline btn-sm" disabled={busy !== null} onClick={() => act(n, "deop", "De-opped")}>DeOP</button>
-                                        <button className="btn btn-outline btn-sm" style={{ color: "var(--amber)" }} disabled={busy !== null} onClick={() => act(n, "kick", "Kicked")}>Kick</button>
-                                        <button className="btn btn-outline btn-sm" style={{ color: "var(--coral)" }} disabled={busy !== null} onClick={() => act(n, "ban", "Banned")}>Ban</button>
-                                    </div>
-                                </td>
-                            </tr>
-                        ))}</tbody>
-                    </table>
+                                </div>
+                            </div>
+                            <div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-2">
+                                <button
+                                    className="w-8 h-8 rounded-lg bg-[#333947] hover:bg-[#F8B84E] text-[#B9C1D1] hover:text-[#1A1D24] transition-colors flex items-center justify-center"
+                                    title="Operator (OP)"
+                                    disabled={busy !== null}
+                                    onClick={() => act(n, "op", "Opped")}
+                                >
+                                    <i className="fa-solid fa-crown text-xs"></i>
+                                </button>
+                                <button
+                                    className="w-8 h-8 rounded-lg bg-[#333947] hover:bg-[#FF6B6B] text-[#B9C1D1] hover:text-[#FFFFFF] transition-colors flex items-center justify-center"
+                                    title="Kick Player"
+                                    disabled={busy !== null}
+                                    onClick={() => act(n, "kick", "Kicked")}
+                                >
+                                    <i className="fa-solid fa-user-minus text-xs"></i>
+                                </button>
+                            </div>
+                        </div>
+                    ))}
                 </div>
             )}
 
             {on && (
-                <div className="card" style={{ marginTop: 16 }}>
-                    <div className="card-header"><span className="card-title">Quick Commands</span></div>
-                    <div className="btn-row" style={{ flexWrap: "wrap" }}>
-                        {[{ l: "Whitelist On", c: "whitelist on" }, { l: "Whitelist Off", c: "whitelist off" }, { l: "List", c: "list" }, { l: "Ban List", c: "banlist" }, { l: "Pardon All", c: "pardon" }].map(({ l, c }) => (
-                            <button key={c} className="btn btn-outline btn-sm" onClick={async () => { await fetch("/api/server/command", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ command: c }) }); msg(`Sent: ${c}`); }}>{l}</button>
+                <div className="mt-8 pt-8 border-t border-[#333947]">
+                    <h4 className="text-sm font-medium text-[#B9C1D1] mb-4 uppercase tracking-wider">Quick Actions</h4>
+                    <div className="flex flex-wrap gap-2">
+                        {[
+                            { l: "Whitelist On", c: "whitelist on", icon: "fa-lock" },
+                            { l: "Whitelist Off", c: "whitelist off", icon: "fa-lock-open" },
+                            { l: "List Info", c: "list", icon: "fa-list" },
+                            { l: "Ban List", c: "banlist", icon: "fa-ban" },
+                            { l: "Pardon All", c: "pardon", icon: "fa-heart" }
+                        ].map(({ l, c, icon }) => (
+                            <button
+                                key={c}
+                                className="px-4 py-2 bg-[#1A1D24] border border-[#333947] hover:bg-[#333947] text-[#B9C1D1] hover:text-[#FFFFFF] rounded-lg text-sm transition-colors flex items-center gap-2"
+                                onClick={async () => { await fetch("/api/server/command", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ command: c }) }); msg(`Sent: ${c}`); }}
+                            >
+                                <i className={`fa-solid ${icon} text-[#828D9F]`}></i> {l}
+                            </button>
                         ))}
                     </div>
                 </div>
             )}
 
-            {toast && <div className="toast">{toast}</div>}
-        </>
+            {toast && (
+                <div className="fixed bottom-6 right-6 bg-[#1A1D24] border border-[#333947] shadow-xl text-[#FFFFFF] px-4 py-3 rounded-lg flex items-center gap-3 animate-fade-in z-50">
+                    <i className="fa-solid fa-bell text-[#F8B84E]"></i>
+                    <span className="text-sm font-medium">{toast}</span>
+                </div>
+            )}
+        </div>
     );
 }

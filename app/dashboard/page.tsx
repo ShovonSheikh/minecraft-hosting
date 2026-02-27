@@ -106,10 +106,9 @@ export default function DashboardClient() {
     const handleAction = async (action: string) => {
         setIsActioning(action);
         try {
-            await fetch("/api/server/action", {
+            await fetch(`/api/server/${action}`, {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ action })
+                headers: { "Content-Type": "application/json" }
             });
             setTimeout(fetchStatus, 2000);
         } catch { /* */ }

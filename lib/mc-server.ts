@@ -2,11 +2,59 @@ import { spawn, ChildProcess, execSync, exec } from "child_process";
 import path from "path";
 import fs from "fs";
 import os from "os";
+import https from "https";
+import yauzl from "yauzl";
 
 const MC_DIR = path.join(process.cwd(), "minecraft");
 const MAX_LOG_LINES = 500;
+const JAVA_DIR = path.join(MC_DIR, ".mcpanel", "java");
+
+// State for installation progress since it may take a while
+let isInstallingJava = false;
+
+function getJavaExecutablePath(): string | null {
+    if (!fs.existsSync(JAVA_DIR)) return null;
+
+    // The downloaded eclipse Temurin usually extracts into a sub-folder like `jdk-17.0.x+y`
+    // We need to find the bin/java executable inside it.
+
+    let entries;
+    try {
+        entries = fs.readdirSync(JAVA_DIR, { withFileTypes: true });
+    } catch {
+        return null;
+    }
+
+    const javaBinName = os.platform() === "win32" ? "java.exe" : "java";
+
+    // Standard search: .mcpanel/java/jdk-*/bin/java
+    for (const entry of entries) {
+        if (entry.isDirectory()) {
+            const potentialPath = path.join(JAVA_DIR, entry.name, "bin", javaBinName);
+            if (fs.existsSync(potentialPath)) {
+                return potentialPath;
+            }
+
+            // macOS sometimes has it inside jdk-*/Contents/Home/bin/java
+            const macPath = path.join(JAVA_DIR, entry.name, "Contents", "Home", "bin", javaBinName);
+            if (fs.existsSync(macPath)) {
+                return macPath;
+            }
+        }
+    }
+
+    // Fallback: what if it's extracted directly to .mcpanel/java/bin/java?
+    const directPath = path.join(JAVA_DIR, "bin", javaBinName);
+    if (fs.existsSync(directPath)) return directPath;
+
+    return null;
+}
 
 function isJavaAvailable(): boolean {
+    // 1. Check local .mcpanel Java first
+    if (getJavaExecutablePath()) return true;
+
+    // 2. Fallback to system Java
     try {
         execSync("java -version", { stdio: "pipe" });
         return true;
@@ -72,16 +120,28 @@ export function startServer(): {
     success: boolean;
     message: string;
     pid?: number;
+    installing?: boolean;
 } {
     if (state.process && !state.process.killed) {
         return { success: false, message: "Server is already running" };
     }
 
+    if (isInstallingJava) {
+        return { success: false, installing: true, message: "Java is currently being installed. Please wait..." };
+    }
+
     // Check if Java is installed
     if (!isJavaAvailable()) {
+        // Kick off asynchronous Java installation
+        installJava().catch(err => {
+            console.error("Failed to install Java:", err);
+            isInstallingJava = false;
+        });
+
         return {
             success: false,
-            message: "Java is not installed or not found in PATH. Please install Java 17+ to run the Minecraft server.",
+            installing: true,
+            message: "Java not found. Automatically downloading and installing Java 17...",
         };
     }
 
@@ -93,12 +153,15 @@ export function startServer(): {
         return { success: false, message: `Executable jar (${jarFile}) not found in minecraft directory` };
     }
 
+    const localJavaPath = getJavaExecutablePath();
+    const javaCommand = localJavaPath || "java";
+
     state.logs = [];
     state.players.clear();
     state.version = null;
 
     const child = spawn(
-        "java",
+        javaCommand,
         ["-Xmx1G", "-Xms1G", "-jar", jarFile, "nogui"],
         {
             cwd: MC_DIR,
@@ -150,6 +213,7 @@ export async function restartServer(): Promise<{
     success: boolean;
     message: string;
     pid?: number;
+    installing?: boolean;
 }> {
     if (state.process && !state.process.killed) {
         sendCommand("stop");
@@ -790,4 +854,156 @@ export async function installLoader(downloadUrl: string, loaderName: string): Pr
         console.error("Install Loader error:", e);
         return { success: false, message: `Installation error: ${e.message}` };
     }
+}
+
+// ═══════════════════════════════════════
+// JAVA INSTALLER LOGIC
+// ═══════════════════════════════════════
+
+async function installJava(): Promise<void> {
+    if (isInstallingJava) return;
+    isInstallingJava = true;
+
+    try {
+        const platform = os.platform();
+        let arch = os.arch();
+
+        // Map Node arch to Adoptium arch
+        if (arch === "x64") arch = "x64";
+        else if (arch === "arm64") arch = "aarch64";
+        else throw new Error(`Unsupported architecture: ${arch}`);
+
+        // Map Node OS to Adoptium OS
+        let adoptOs = "";
+        if (platform === "win32") adoptOs = "windows";
+        else if (platform === "linux") adoptOs = "linux";
+        else if (platform === "darwin") adoptOs = "mac";
+        else throw new Error(`Unsupported OS: ${platform}`);
+
+        const extension = adoptOs === "windows" ? "zip" : "tar.gz";
+        const downloadUrl = `https://api.adoptium.net/v3/binary/latest/17/ga/${adoptOs}/${arch}/jre/hotspot/normal/eclipse`;
+
+        const archivePath = path.join(MC_DIR, ".mcpanel", `java-17.${extension}`);
+
+        if (!fs.existsSync(path.dirname(archivePath))) {
+            fs.mkdirSync(path.dirname(archivePath), { recursive: true });
+        }
+
+        appendLog(`[MCPanel] Downloading Java 17 for ${adoptOs}-${arch}...`);
+
+        await downloadFile(downloadUrl, archivePath);
+
+        appendLog(`[MCPanel] Extracting Java 17...`);
+
+        // Clean old java dir if exists
+        if (fs.existsSync(JAVA_DIR)) {
+            fs.rmSync(JAVA_DIR, { recursive: true, force: true });
+        }
+        fs.mkdirSync(JAVA_DIR, { recursive: true });
+
+        if (extension === "zip") {
+            await extractZip(archivePath, JAVA_DIR);
+        } else {
+            // macOS or Linux: native tar is universally available
+            execSync(`tar -xzf "${archivePath}" -C "${JAVA_DIR}"`, { stdio: "pipe" });
+        }
+
+        appendLog(`[MCPanel] Java 17 installed successfully to local environment.`);
+
+        // Clean up archive
+        if (fs.existsSync(archivePath)) {
+            fs.unlinkSync(archivePath);
+        }
+
+        // Now that Java is installed, actually start the server
+        appendLog(`[MCPanel] Automatically starting server with new Java 17 runtime...`);
+        startServer();
+
+    } catch (error: any) {
+        appendLog(`[MCPanel] Failed to install Java automatically: ${error.message}`);
+        console.error("Java auto-install failed:", error);
+    } finally {
+        isInstallingJava = false;
+    }
+}
+
+function downloadFile(url: string, dest: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+        const file = fs.createWriteStream(dest);
+
+        const request = https.get(url, (response) => {
+            // Handle redirects
+            if (response.statusCode && response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
+                file.close();
+                downloadFile(response.headers.location, dest).then(resolve).catch(reject);
+                return;
+            }
+
+            if (response.statusCode !== 200) {
+                reject(new Error(`Failed to get '${url}' (${response.statusCode})`));
+                return;
+            }
+
+            response.pipe(file);
+
+            file.on('finish', () => {
+                file.close();
+                resolve();
+            });
+        });
+
+        request.on('error', (err) => {
+            fs.unlink(dest, () => reject(err));
+        });
+
+        file.on('error', (err) => {
+            fs.unlink(dest, () => reject(err));
+        });
+    });
+}
+
+function extractZip(sourceZip: string, destDir: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+        yauzl.open(sourceZip, { lazyEntries: true }, (err, zipfile) => {
+            if (err) return reject(err);
+            if (!zipfile) return reject(new Error("Failed to open zipfile"));
+
+            zipfile.readEntry();
+            zipfile.on("entry", (entry) => {
+                const fullPath = path.join(destDir, entry.fileName);
+
+                // Security check to prevent zip slip
+                if (!path.resolve(fullPath).startsWith(path.resolve(destDir))) {
+                    console.warn(`Skipping malicious zip entry: ${entry.fileName}`);
+                    zipfile.readEntry();
+                    return;
+                }
+
+                if (/\/$/.test(entry.fileName)) {
+                    // Directory file names end with '/'
+                    if (!fs.existsSync(fullPath)) fs.mkdirSync(fullPath, { recursive: true });
+                    zipfile.readEntry();
+                } else {
+                    // File entry
+                    const dir = path.dirname(fullPath);
+                    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+
+                    zipfile.openReadStream(entry, (err, readStream) => {
+                        if (err) return reject(err);
+                        if (!readStream) return reject(new Error("Failed to get readStream"));
+
+                        const writeStream = fs.createWriteStream(fullPath);
+                        readStream.pipe(writeStream);
+
+                        writeStream.on("close", () => {
+                            zipfile.readEntry();
+                        });
+                    });
+                }
+            });
+
+            zipfile.on("end", resolve);
+            zipfile.on("error", reject);
+        });
+    });
 }

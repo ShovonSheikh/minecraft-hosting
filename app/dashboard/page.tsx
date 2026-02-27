@@ -118,15 +118,23 @@ export default function DashboardClient() {
             const data = await req.json();
 
             if (!req.ok || !data.success) {
-                // If the command itself failed (e.g. no server.jar), don't poll, just abort
-                alert(`Action Failed: ${data.message || "Unknown error"}`);
-                setIsActioning(null);
-                return;
+                if (data.installing) {
+                    // Java is being installed in the background. Note: the button will stay in loading state because isActioning is still set.
+                    // We can just poll status like normal, because startServer will eventually start it once installed.
+                    // Or actually, the backend startServer returns immediately and kicks off the install asynchronously.
+                    // So we should poll until it's running. The install takes a while.
+                    console.log("Java is installing in the background...");
+                } else {
+                    // If the command itself failed (e.g. no server.jar), don't poll, just abort
+                    alert(`Action Failed: ${data.message || "Unknown error"}`);
+                    setIsActioning(null);
+                    return;
+                }
             }
 
             // Poll status until the expected state is reached
             const targetRunning = action === "start" || action === "restart";
-            const maxWait = 60000; // 60s max wait
+            const maxWait = 90000; // 90s max wait (increased for Java download)
             const pollInterval = 1500;
             const startTime = Date.now();
 
@@ -135,15 +143,15 @@ export default function DashboardClient() {
                     await new Promise(r => setTimeout(r, pollInterval));
                     try {
                         const res = await fetch("/api/server/status");
-                        const data = await res.json();
-                        setStatus({ running: data.running, playerCount: data.playerCount });
-                        if (data.players) setPlayers(data.players);
+                        const statusData = await res.json();
+                        setStatus({ running: statusData.running, playerCount: statusData.playerCount });
+                        if (statusData.players) setPlayers(statusData.players);
 
                         // Ensure console logs stream live during the startup/shutdown sequence
                         await fetchLogs();
 
-                        if (action === "stop" && !data.running) return;
-                        if ((action === "start" || action === "restart") && data.running) return;
+                        if (action === "stop" && !statusData.running) return;
+                        if ((action === "start" || action === "restart") && statusData.running) return;
                     } catch { /* */ }
                 }
             };

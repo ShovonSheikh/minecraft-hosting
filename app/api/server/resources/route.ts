@@ -4,5 +4,5 @@ export const dynamic = "force-dynamic";
 
 export async function GET() {
     const resources = getResources();
-    return Response.json({ resources });
+    return Response.json(resources);
 }

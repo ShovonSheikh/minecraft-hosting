@@ -1,6 +1,7 @@
-import { spawn, ChildProcess, execSync } from "child_process";
+import { spawn, ChildProcess, execSync, exec } from "child_process";
 import path from "path";
 import fs from "fs";
+import os from "os";
 
 const MC_DIR = path.join(process.cwd(), "minecraft");
 const MAX_LOG_LINES = 500;
@@ -115,14 +116,14 @@ export function startServer(): {
     });
 
     child.on("exit", (code) => {
-        appendLog(`[MCPanel] Server process exited with code ${code}`);
+        appendLog(`[MCPanel] Server process exited with code ${code} `);
         state.process = null;
         state.startedAt = null;
         state.players.clear();
     });
 
     child.on("error", (err) => {
-        appendLog(`[MCPanel] Process error: ${err.message}`);
+        appendLog(`[MCPanel] Process error: ${err.message} `);
         state.process = null;
         state.startedAt = null;
     });
@@ -187,8 +188,8 @@ export function sendCommand(command: string): {
     }
 
     state.process.stdin.write(command + "\n");
-    appendLog(`> ${command}`);
-    return { success: true, message: `Command sent: ${command}` };
+    appendLog(`> ${command} `);
+    return { success: true, message: `Command sent: ${command} ` };
 }
 
 export function getStatus() {
@@ -239,11 +240,11 @@ export function setProperties(
     let content = fs.readFileSync(propsPath, "utf-8");
 
     for (const [key, value] of Object.entries(updates)) {
-        const regex = new RegExp(`^${key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}=.*$`, "m");
+        const regex = new RegExp(`^ ${key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}=.* $`, "m");
         if (regex.test(content)) {
-            content = content.replace(regex, `${key}=${value}`);
+            content = content.replace(regex, `${key}=${value} `);
         } else {
-            content += `\n${key}=${value}`;
+            content += `\n${key}=${value} `;
         }
     }
 
@@ -431,6 +432,133 @@ export function writeFile(relativePath: string, content: string): { success: boo
     }
 }
 
+export function createFolder(relativePath: string): { success: boolean; message: string } {
+    const folderPath = path.join(MC_DIR, relativePath);
+
+    // Security check
+    const resolved = path.resolve(folderPath);
+    if (!resolved.startsWith(path.resolve(MC_DIR))) {
+        return { success: false, message: "Access denied" };
+    }
+
+    if (fs.existsSync(folderPath)) {
+        return { success: false, message: "Folder already exists" };
+    }
+
+    try {
+        fs.mkdirSync(folderPath, { recursive: true });
+        return { success: true, message: "Folder created" };
+    } catch {
+        return { success: false, message: "Failed to create folder" };
+    }
+}
+
+export function deleteItem(relativePath: string): { success: boolean; message: string } {
+    const itemPath = path.join(MC_DIR, relativePath);
+
+    // Security check
+    const resolved = path.resolve(itemPath);
+    if (!resolved.startsWith(path.resolve(MC_DIR))) {
+        return { success: false, message: "Access denied" };
+    }
+
+    if (!fs.existsSync(itemPath)) {
+        return { success: false, message: "Item not found" };
+    }
+
+    // Prevent deleting the root minecraft dir
+    if (resolved === path.resolve(MC_DIR)) {
+        return { success: false, message: "Cannot delete root directory" };
+    }
+
+    try {
+        const stats = fs.statSync(itemPath);
+        if (stats.isDirectory()) {
+            fs.rmSync(itemPath, { recursive: true, force: true });
+        } else {
+            fs.unlinkSync(itemPath);
+        }
+        return { success: true, message: "Deleted successfully" };
+    } catch {
+        return { success: false, message: "Failed to delete" };
+    }
+}
+
+export function renameItem(oldRelPath: string, newRelPath: string): { success: boolean; message: string } {
+    const oldPath = path.join(MC_DIR, oldRelPath);
+    const newPath = path.join(MC_DIR, newRelPath);
+
+    // Security check
+    const resolvedOld = path.resolve(oldPath);
+    const resolvedNew = path.resolve(newPath);
+    if (!resolvedOld.startsWith(path.resolve(MC_DIR)) || !resolvedNew.startsWith(path.resolve(MC_DIR))) {
+        return { success: false, message: "Access denied" };
+    }
+
+    if (!fs.existsSync(oldPath)) {
+        return { success: false, message: "Item not found" };
+    }
+
+    if (fs.existsSync(newPath)) {
+        return { success: false, message: "An item with that name already exists" };
+    }
+
+    try {
+        fs.renameSync(oldPath, newPath);
+        return { success: true, message: "Renamed successfully" };
+    } catch {
+        return { success: false, message: "Failed to rename" };
+    }
+}
+
+export function copyItem(oldRelPath: string, newRelPath: string): { success: boolean; message: string } {
+    const oldPath = path.join(MC_DIR, oldRelPath);
+    const newPath = path.join(MC_DIR, newRelPath);
+
+    // Security check
+    const resolvedOld = path.resolve(oldPath);
+    const resolvedNew = path.resolve(newPath);
+    if (!resolvedOld.startsWith(path.resolve(MC_DIR)) || !resolvedNew.startsWith(path.resolve(MC_DIR))) {
+        return { success: false, message: "Access denied" };
+    }
+
+    if (!fs.existsSync(oldPath)) {
+        return { success: false, message: "Item not found" };
+    }
+    if (fs.existsSync(newPath)) {
+        return { success: false, message: "An item with that name already exists" };
+    }
+
+    try {
+        fs.cpSync(oldPath, newPath, { recursive: true });
+        return { success: true, message: "Copied successfully" };
+    } catch {
+        return { success: false, message: "Failed to copy" };
+    }
+}
+
+export function saveUploadedFile(relativePath: string, buffer: Buffer): { success: boolean; message: string } {
+    const filePath = path.join(MC_DIR, relativePath);
+
+    // Security check
+    const resolved = path.resolve(filePath);
+    if (!resolved.startsWith(path.resolve(MC_DIR))) {
+        return { success: false, message: "Access denied" };
+    }
+
+    try {
+        // Ensure directory exists
+        const dir = path.dirname(filePath);
+        if (!fs.existsSync(dir)) {
+            fs.mkdirSync(dir, { recursive: true });
+        }
+        fs.writeFileSync(filePath, buffer);
+        return { success: true, message: "File uploaded" };
+    } catch {
+        return { success: false, message: "Failed to upload file" };
+    }
+}
+
 // ═══════════════════════════════════════
 // LOADER INFO
 // ═══════════════════════════════════════
@@ -506,7 +634,7 @@ export function getResources(): ResourceInfo {
         if (process.platform === "win32") {
             // Windows: use wmic to get disk info
             const drive = path.resolve(MC_DIR).substring(0, 2); // e.g. "C:"
-            const out = execSync(`wmic logicaldisk where "DeviceID='${drive}'" get Size,FreeSpace /format:csv`, { encoding: "utf-8" });
+            const out = execSync(`wmic logicaldisk where "DeviceID='${drive}'" get Size, FreeSpace / format: csv`, { encoding: "utf-8" });
             const lines = out.trim().split("\n").filter((l: string) => l.trim() && !l.startsWith("Node"));
             if (lines.length > 0) {
                 const parts = lines[lines.length - 1].split(",");
@@ -518,7 +646,7 @@ export function getResources(): ResourceInfo {
             }
         } else {
             // Linux/Mac: use df
-            const out = execSync(`df -B1 "${MC_DIR}" | tail -1`, { encoding: "utf-8" });
+            const out = execSync(`df - B1 "${MC_DIR}" | tail - 1`, { encoding: "utf-8" });
             const parts = out.trim().split(/\s+/);
             if (parts.length >= 4) {
                 diskTotalMB = Math.round(parseInt(parts[1]) / 1024 / 1024);
@@ -622,3 +750,42 @@ export function getWorlds(): WorldInfo[] {
     return worlds.sort((a, b) => (a.isDefault ? -1 : b.isDefault ? 1 : a.name.localeCompare(b.name)));
 }
 
+// ═══════════════════════════════════════
+// NEW: AUTO INSTALL LOADER
+// ═══════════════════════════════════════
+export async function installLoader(downloadUrl: string, loaderName: string): Promise<{ success: boolean; message: string }> {
+    try {
+        const response = await fetch(downloadUrl);
+        if (!response.ok) {
+            return { success: false, message: `Failed to download ${loaderName} (HTTP ${response.status})` };
+        }
+
+        const arrayBuffer = await response.arrayBuffer();
+        const buffer = Buffer.from(arrayBuffer);
+        const jarPath = path.join(MC_DIR, "server.jar");
+
+        // Save downloaded jar
+        fs.writeFileSync(jarPath, buffer);
+
+        // Update loader info file so the system knows what's running
+        const infoFolder = path.join(MC_DIR, ".mcpanel");
+        const infoFile = path.join(infoFolder, "loader-info.json");
+
+        if (!fs.existsSync(infoFolder)) {
+            fs.mkdirSync(infoFolder, { recursive: true });
+        }
+
+        const loaderInfo = {
+            id: loaderName.toLowerCase().replace(/[^a-z0-9]/g, "-"),
+            name: loaderName,
+            version: "Latest", // We don't always know exact version from a direct URL request hook
+            installedAt: new Date().toISOString()
+        };
+        fs.writeFileSync(infoFile, JSON.stringify(loaderInfo, null, 2), "utf-8");
+
+        return { success: true, message: `Successfully installed ${loaderName}` };
+    } catch (e: any) {
+        console.error("Install Loader error:", e);
+        return { success: false, message: `Installation error: ${e.message}` };
+    }
+}

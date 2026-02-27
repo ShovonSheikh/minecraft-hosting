@@ -95,6 +95,11 @@
   background: var(--amber-deep);
 }
 
+/* ── Default Zoom ── */
+html {
+  zoom: 1.2;
+}
+
 /* ── Body ── */
 body {
   background: var(--bg-void);

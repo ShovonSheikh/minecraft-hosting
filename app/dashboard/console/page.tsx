@@ -3,7 +3,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 
 function logClass(l: string): string {
-    // Simple colorization for info/warn/error mapped to Onyx colors
     if (l.includes("WARN")) return "text-[#F8B84E]";
     if (l.includes("ERROR") || l.includes("Exception")) return "text-[#FF6B6B]";
     if (l.includes("Server thread/INFO")) return "text-[#B9C1D1]";
@@ -24,8 +23,12 @@ export default function ConsolePage() {
     const poll = useCallback(async () => {
         try {
             const [lr, sr] = await Promise.all([fetch("/api/server/logs?lines=500"), fetch("/api/server/status")]);
-            setLogs((await lr.json()).logs.split("\n").filter((l: string) => l.trim()) || []);
-            setOn((await sr.json()).running);
+            const logsData = await lr.json();
+            const statusData = await sr.json();
+            // logs is already an array from the API
+            const logArr = Array.isArray(logsData.logs) ? logsData.logs : (logsData.logs || "").split("\n");
+            setLogs(logArr.filter((l: string) => l.trim()));
+            setOn(statusData.running);
         } catch { /* */ }
     }, []);
 
@@ -71,7 +74,7 @@ export default function ConsolePage() {
     };
 
     return (
-        <div id="page-console" className="page-section max-w-7xl mx-auto h-[calc(100vh-8rem)] block">
+        <div id="page-console" className="page-section max-w-7xl mx-auto h-[calc(100vh-4rem)] block p-6">
             <div className="bg-[#090A0C] border border-[#333947] rounded-xl flex flex-col shadow-2xl h-full">
                 {/* Console Header */}
                 <div className="px-4 py-3 border-b border-[#333947] flex justify-between items-center bg-[#1A1D24]/50 rounded-t-xl shrink-0">

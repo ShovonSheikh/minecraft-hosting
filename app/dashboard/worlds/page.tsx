@@ -10,7 +10,37 @@ export default function WorldsPage() {
     const [worlds, setWorlds] = useState<World[]>([]);
     const [loading, setLoading] = useState(true);
     const [toast, setToast] = useState<string | null>(null);
+    const [deleting, setDeleting] = useState<string | null>(null);
     const msg = (m: string) => { setToast(m); setTimeout(() => setToast(null), 3000); };
+
+    const setDefault = async (name: string) => {
+        try {
+            const r = await fetch("/api/server/worlds", {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ action: "set-default", name })
+            });
+            const d = await r.json();
+            msg(d.message);
+            if (d.success) poll();
+        } catch { msg("Failed to set default"); }
+    };
+
+    const deleteWorld = async (name: string) => {
+        if (!confirm(`Are you sure you want to completely delete the world '${name}'? This cannot be undone.`)) return;
+        setDeleting(name);
+        try {
+            const r = await fetch("/api/server/worlds", {
+                method: "DELETE",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ name })
+            });
+            const d = await r.json();
+            msg(d.message);
+            if (d.success) poll();
+        } catch { msg("Failed to delete world"); }
+        finally { setDeleting(null); }
+    };
 
     const poll = useCallback(async () => {
         try { setWorlds((await (await fetch("/api/server/worlds")).json()).worlds || []); } catch { /* */ }
@@ -22,7 +52,7 @@ export default function WorldsPage() {
     if (loading) return <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "60vh" }}><div className="spinner spinner-lg" /></div>;
 
     return (
-        <>
+        <div className="p-6">
             <div className="page-header">
                 <h2 className="page-title">Worlds</h2>
                 <p className="page-subtitle">Manage server worlds and dimensions</p>
@@ -59,6 +89,14 @@ export default function WorldsPage() {
                                         msg((await r.json()).message);
                                     } catch { msg("Backup failed"); }
                                 }}>⟲ Backup</button>
+                                {!w.isDefault && (
+                                    <button className="btn btn-outline btn-sm" onClick={() => setDefault(w.name)} title="Set as default world">
+                                        ★ Set Default
+                                    </button>
+                                )}
+                                <button className="btn btn-outline btn-sm text-red-400 hover:text-red-300 hover:bg-red-500/10 hover:border-red-500/30" onClick={() => deleteWorld(w.name)} disabled={deleting === w.name}>
+                                    {deleting === w.name ? "Deleting..." : "🗑️ Delete"}
+                                </button>
                             </div>
                         </div>
                     ))}
@@ -78,6 +116,6 @@ export default function WorldsPage() {
             </div>
 
             {toast && <div className="toast">{toast}</div>}
-        </>
+        </div>
     );
 }

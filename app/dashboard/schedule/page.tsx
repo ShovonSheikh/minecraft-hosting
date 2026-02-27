@@ -51,7 +51,7 @@ export default function SchedulePage() {
     if (loading) return <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "60vh" }}><div className="spinner spinner-lg" /></div>;
 
     return (
-        <>
+        <div className="p-6">
             <div className="page-header">
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                     <div><h2 className="page-title">Schedule</h2><p className="page-subtitle">Automated tasks & maintenance</p></div>
@@ -119,6 +119,6 @@ export default function SchedulePage() {
             )}
 
             {toast && <div className="toast">{toast}</div>}
-        </>
+        </div>
     );
 }

@@ -32,7 +32,7 @@ export default function PlayersPage() {
     const on = status?.running ?? false, players = status?.players ?? [];
 
     return (
-        <div id="page-players" className="page-section max-w-7xl mx-auto space-y-6 block">
+        <div id="page-players" className="page-section max-w-7xl mx-auto space-y-6 block p-6">
             <div className="flex justify-between items-center border-b border-[#333947] pb-4">
                 <div className="flex gap-4 sm:gap-6 text-sm font-medium overflow-x-auto w-full">
                     <button className="text-[#4299E1] border-b-2 border-[#4299E1] pb-4 -mb-4 whitespace-nowrap">

@@ -95,7 +95,7 @@ export default function DomainsPage() {
         : "Not configured";
 
     return (
-        <div id="page-domains" className="page-section max-w-7xl mx-auto space-y-6 block">
+        <div id="page-domains" className="page-section max-w-7xl mx-auto space-y-6 block p-6">
             <div className="flex justify-between items-center sm:flex-row flex-col gap-4">
                 <div>
                     <h2 className="text-xl font-bold text-[#FFFFFF]">Domains & Connection</h2>

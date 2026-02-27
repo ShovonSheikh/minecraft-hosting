@@ -1,122 +1,160 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 
-interface LoaderInfo { type: string; jarFile: string; size: number; }
-
-const LOADERS = [
-    { id: "vanilla", name: "Vanilla", icon: "🟩", desc: "Official Mojang server. No mods support.", color: "--emerald" },
-    { id: "paper", name: "Paper", icon: "📄", desc: "High performance Bukkit/Spigot fork. Most popular.", color: "--emerald" },
-    { id: "fabric", name: "Fabric", icon: "🧵", desc: "Lightweight modding toolchain. Fast updates.", color: "--amethyst" },
-    { id: "forge", name: "Forge", icon: "🔨", desc: "The original modding platform. Huge mod library.", color: "--gold" },
-    { id: "quilt", name: "Quilt", icon: "🪡", desc: "Fabric fork focused on inclusivity and modularity.", color: "--lapis" },
-];
-
-function formatBytes(b: number): string {
-    if (b === 0) return "0 B";
-    const k = 1024;
-    const s = ["B", "KB", "MB", "GB"];
-    const i = Math.floor(Math.log(b) / Math.log(k));
-    return parseFloat((b / Math.pow(k, i)).toFixed(1)) + " " + s[i];
+interface Loader {
+    id: string;
+    name: string;
+    version: string;
+    installedAt: string;
 }
 
-export default function LoaderPage() {
-    const [loader, setLoader] = useState<LoaderInfo | null>(null);
-    const [loading, setLoading] = useState(true);
+const AVAILABLE_LOADERS = [
+    { id: 'paper', name: 'Paper', desc: 'High performance fork of Spigot. Best for most servers.', type: 'server', icon: 'fa-bolt' },
+    { id: 'vanilla', name: 'Vanilla', desc: 'The official standard server software by Mojang.', type: 'server', icon: 'fa-cubes' },
+    { id: 'fabric', name: 'Fabric', desc: 'Lightweight and modular mod loader. Very popular.', type: 'modded', icon: 'fa-feather' },
+    { id: 'forge', name: 'Forge', desc: 'The classic mod loader. Required for many older mods.', type: 'modded', icon: 'fa-hammer' },
+    { id: 'purpur', name: 'Purpur', desc: 'Drop-in replacement for Paper with more features.', type: 'server', icon: 'fa-wand-magic-sparkles' },
+    { id: 'quilt', name: 'Quilt', desc: 'Modern fork of Fabric with a focus on ecosystem.', type: 'modded', icon: 'fa-layer-group' }
+];
 
-    const fetchLoader = useCallback(async () => {
-        try {
-            const res = await fetch("/api/server/loader");
-            const data = await res.json();
-            setLoader(data.loader || null);
-        } catch { /* silently fail */ }
-        finally { setLoading(false); }
+export default function LoaderPage() {
+    const [current, setCurrent] = useState<Loader | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [installing, setInstalling] = useState<string | null>(null);
+    const [toast, setToast] = useState<string | null>(null);
+
+    const msg = (m: string) => { setToast(m); setTimeout(() => setToast(null), 3500); };
+
+    useEffect(() => {
+        const fetchCurrent = async () => {
+            try {
+                const res = await fetch("/api/server/loader");
+                const data = await res.json();
+                setCurrent(data.loader);
+            } catch (e) {
+                console.error(e);
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchCurrent();
     }, []);
 
-    useEffect(() => { fetchLoader(); }, [fetchLoader]);
+    const handleInstall = async (lId: string, lName: string) => {
+        if (!confirm(`Are you sure you want to install ${lName}? This will replace your current server.jar.`)) return;
+        setInstalling(lId);
+        try {
+            const res = await fetch("/api/server/loader/install", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ loaderId: lId, loaderName: lName })
+            });
+            const data = await res.json();
+            msg(data.message);
+            if (data.success) {
+                // Refresh current loader state manually to reflect immediate change
+                setCurrent({
+                    id: lId,
+                    name: lName,
+                    version: "Latest",
+                    installedAt: new Date().toISOString()
+                });
+            }
+        } catch (e: any) {
+            msg(`Installation failed: ${e.message}`);
+        } finally {
+            setInstalling(null);
+        }
+    };
 
-    if (loading) return <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "60vh" }}><div className="spinner spinner-lg" /></div>;
+    if (loading) return <div className="flex items-center justify-center h-[60vh]"><div className="spinner spinner-lg" /></div>;
 
     return (
-        <>
+        <div className="p-6">
             <div className="page-header">
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                     <div>
-                        <h2>◈ Server Loader</h2>
-                        <p>Choose your server software and modding platform</p>
+                        <h2 className="page-title">Server Loader</h2>
+                        <p className="page-subtitle">Manage server software and version</p>
                     </div>
-                    {loader && (
-                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                            <span className="status-badge online" style={{ fontSize: 12 }}>
-                                Active: {loader.type.toUpperCase()}
-                            </span>
-                            <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--text-muted)" }}>
-                                {loader.jarFile} · {formatBytes(loader.size)}
-                            </span>
+                    {current && (
+                        <div className="badge badge-success" style={{ fontSize: '0.85rem' }}>
+                            <i className="fa-solid fa-check" style={{ marginRight: '6px' }}></i>
+                            Currently Running: {current.name} {current.version}
                         </div>
                     )}
                 </div>
             </div>
 
-            {/* Current loader info */}
-            <div className="card" style={{ marginBottom: 24 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-                    <div style={{ width: 48, height: 48, borderRadius: 12, background: "var(--emerald-dim)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24 }}>
-                        {LOADERS.find(l => l.id === loader?.type)?.icon || "❓"}
-                    </div>
-                    <div>
-                        <div style={{ fontFamily: "var(--font-display)", fontSize: 18, fontWeight: 700, color: "var(--text-bright)" }}>
-                            Currently Running: {LOADERS.find(l => l.id === loader?.type)?.name || loader?.type || "Unknown"}
-                        </div>
-                        <div style={{ fontSize: 13, color: "var(--text-secondary)", marginTop: 2 }}>
-                            {LOADERS.find(l => l.id === loader?.type)?.desc || "Unknown server type"}
-                        </div>
-                    </div>
-                </div>
-            </div>
+            <div className="grid">
+                {AVAILABLE_LOADERS.map(loader => {
+                    const isCurrent = current?.id === loader.id;
+                    const isInstalling = installing === loader.id;
 
-            {/* Loader cards */}
-            <h3 style={{ fontFamily: "var(--font-display)", fontSize: 13, fontWeight: 700, color: "var(--text-bright)", marginBottom: 16, letterSpacing: "0.02em" }}>
-                AVAILABLE LOADERS
-            </h3>
-            <div className="loader-grid">
-                {LOADERS.map((l, i) => (
-                    <div
-                        key={l.id}
-                        className={`loader-card ${loader?.type === l.id ? "active" : ""}`}
-                        style={{ animationDelay: `${i * 0.05}s` }}
-                    >
-                        <div className="loader-icon">{l.icon}</div>
-                        <div className="loader-name">{l.name}</div>
-                        <div className="loader-desc">{l.desc}</div>
-                        {loader?.type === l.id ? (
-                            <div style={{ marginTop: 16 }}>
-                                <span className="status-badge online" style={{ fontSize: 11 }}>
-                                    <span className="status-dot online" /> Active
-                                </span>
+                    return (
+                        <div key={loader.id} className="card" style={{
+                            borderColor: isCurrent ? 'var(--primary)' : 'var(--border)',
+                            backgroundColor: isCurrent ? 'rgba(248, 184, 78, 0.02)' : 'var(--bg-card)'
+                        }}>
+                            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
+                                <div style={{ display: "flex", gap: "1rem" }}>
+                                    <div style={{
+                                        width: '40px', height: '40px', borderRadius: '8px',
+                                        backgroundColor: isCurrent ? 'rgba(248, 184, 78, 0.1)' : 'var(--bg-elevated)',
+                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                        color: isCurrent ? 'var(--primary)' : 'var(--text-muted)'
+                                    }}>
+                                        <i className={`fa-solid ${loader.icon} fa-lg`}></i>
+                                    </div>
+                                    <div>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                                            <h3 style={{ margin: 0, fontSize: '1.2rem', color: isCurrent ? 'var(--primary)' : 'var(--text-bright)' }}>
+                                                {loader.name}
+                                            </h3>
+                                            <span className={`badge ${loader.type === 'modded' ? 'badge-warning' : 'badge-info'}`} style={{ padding: '0.1rem 0.5rem', fontSize: '0.7rem' }}>
+                                                {loader.type}
+                                            </span>
+                                        </div>
+                                        <p style={{ margin: 0, color: 'var(--text-normal)', fontSize: '0.9rem', lineHeight: 1.5 }}>
+                                            {loader.desc}
+                                        </p>
+                                    </div>
+                                </div>
                             </div>
-                        ) : (
-                            <button className="btn btn-ghost btn-sm" style={{ marginTop: 16 }}
-                                onClick={() => alert(`To switch to ${l.name}, download the server JAR from the official website, rename it to server.jar, replace the existing one in the minecraft/ directory, and restart the server.`)}>
-                                Switch to {l.name}
-                            </button>
-                        )}
-                    </div>
-                ))}
+                            <div style={{ marginTop: '1.5rem', paddingTop: '1rem', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'flex-end' }}>
+                                {isCurrent ? (
+                                    <div style={{ display: "flex", gap: "1rem", alignItems: "center" }}>
+                                        <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                                            Installed {new Date(current.installedAt).toLocaleDateString()}
+                                        </span>
+                                        <button className="btn btn-secondary" disabled>Active</button>
+                                    </div>
+                                ) : (
+                                    <button
+                                        className="btn btn-primary"
+                                        onClick={() => handleInstall(loader.id, loader.name)}
+                                        disabled={installing !== null}
+                                        style={{ display: "flex", alignItems: "center", gap: "8px" }}
+                                    >
+                                        {isInstalling ? (
+                                            <>
+                                                <i className="fa-solid fa-circle-notch fa-spin"></i> Downloading...
+                                            </>
+                                        ) : (
+                                            <>
+                                                <i className="fa-solid fa-download"></i> Install Latest
+                                            </>
+                                        )}
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                    );
+                })}
             </div>
 
-            {/* Instructions */}
-            <div className="card" style={{ marginTop: 24 }}>
-                <h3 style={{ fontFamily: "var(--font-display)", fontSize: 13, fontWeight: 700, color: "var(--text-bright)", marginBottom: 10, letterSpacing: "0.02em" }}>
-                    HOW TO SWITCH LOADERS
-                </h3>
-                <div style={{ fontSize: 14, color: "var(--text-secondary)", lineHeight: 1.8 }}>
-                    <p>1. <strong>Stop the server</strong> from the Dashboard.</p>
-                    <p>2. Download the desired server JAR from its official website.</p>
-                    <p>3. Use the <strong>File Manager</strong> or manually replace <code style={{ fontFamily: "var(--font-mono)", background: "var(--bg-elevated)", padding: "2px 6px", borderRadius: 4, fontSize: 13 }}>server.jar</code> in the <code style={{ fontFamily: "var(--font-mono)", background: "var(--bg-elevated)", padding: "2px 6px", borderRadius: 4, fontSize: 13 }}>minecraft/</code> directory.</p>
-                    <p>4. <strong>Start the server</strong> — it will auto-detect the new loader.</p>
-                </div>
-            </div>
-        </>
+            {toast && <div className="toast">{toast}</div>}
+        </div>
     );
 }

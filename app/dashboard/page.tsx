@@ -1,18 +1,18 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
 
 export default function DashboardClient() {
     const [status, setStatus] = useState({ running: false, playerCount: 0 });
     const [resources, setResources] = useState({
         cpuPercent: 0,
-        memoryUsage: "0.0",
-        memoryLimit: "8.0",
+        memoryUsedMB: 0,
+        memoryTotalMB: 8192,
         memoryPercent: 0,
-        storageUsage: "12.4", // Static example matched to HTML
-        storageLimit: "25.0",
-        storagePercent: 49,
+        diskUsedMB: 0,
+        diskTotalMB: 0,
+        diskPercent: 0,
         netIn: "0.0",
         netOut: "0.0"
     });
@@ -32,44 +32,48 @@ export default function DashboardClient() {
                 const res = await fetch("/api/server/logs?lines=50");
                 const data = await res.json();
                 if (data.logs) {
-                    setLogs(data.logs.split("\n").filter((l: string) => l.trim()));
+                    // logs is already an array from the API
+                    const logArr = Array.isArray(data.logs) ? data.logs : data.logs.split("\n");
+                    setLogs(logArr.filter((l: string) => l.trim()));
                 }
             } catch { /* */ }
         };
         fetchInitialLogs();
     }, []);
 
-    const fetchStatus = async () => {
+    const fetchStatus = useCallback(async () => {
         try {
             const res = await fetch("/api/server/status");
             const data = await res.json();
             setStatus({ running: data.running, playerCount: data.playerCount });
             if (data.players) setPlayers(data.players);
-
-            // Simulating network inbound/outbound slightly fluctuating
-            setResources(prev => ({
-                ...prev,
-                netIn: (Math.random() * 2 + 0.5).toFixed(1),
-                netOut: (Math.random() * 1.5 + 0.2).toFixed(1)
-            }));
         } catch { /* */ }
-    };
+    }, []);
 
     const fetchResources = async () => {
         try {
             const res = await fetch("/api/server/resources");
             const data = await res.json();
             setResources(prev => {
-                const cpu = typeof data.cpu === 'number' ? data.cpu : 0;
-                const memUsage = typeof data.memory === 'string' ? data.memory : "0.0";
-                const memLimit = parseFloat(prev.memoryLimit) || 8.0;
-                const memPercent = (parseFloat(memUsage) / memLimit) * 100;
+                const cpuPercent = typeof data.cpuPercent === 'number' ? data.cpuPercent : 0;
+                const memoryUsedMB = typeof data.memoryUsedMB === 'number' ? data.memoryUsedMB : 0;
+                const memoryTotalMB = typeof data.memoryTotalMB === 'number' ? data.memoryTotalMB : prev.memoryTotalMB;
+                const memoryPercent = typeof data.memoryPercent === 'number' ? data.memoryPercent : 0;
+                const diskUsedMB = typeof data.diskUsedMB === 'number' ? data.diskUsedMB : 0;
+                const diskTotalMB = typeof data.diskTotalMB === 'number' ? data.diskTotalMB : 0;
+                const diskPercent = typeof data.diskPercent === 'number' ? data.diskPercent : 0;
 
                 return {
-                    ...prev,
-                    cpuPercent: cpu,
-                    memoryUsage: memUsage,
-                    memoryPercent: isNaN(memPercent) ? 0 : memPercent
+                    cpuPercent,
+                    memoryUsedMB,
+                    memoryTotalMB,
+                    memoryPercent,
+                    diskUsedMB,
+                    diskTotalMB,
+                    diskPercent,
+                    // Simulate network slightly fluctuating when running
+                    netIn: (Math.random() * 2 + 0.5).toFixed(1),
+                    netOut: (Math.random() * 1.5 + 0.2).toFixed(1)
                 };
             });
         } catch { /* */ }
@@ -80,7 +84,8 @@ export default function DashboardClient() {
             const res = await fetch("/api/server/logs?lines=20");
             const data = await res.json();
             if (data.logs) {
-                setLogs(data.logs.split("\n").filter((l: string) => l.trim()));
+                const logArr = Array.isArray(data.logs) ? data.logs : data.logs.split("\n");
+                setLogs(logArr.filter((l: string) => l.trim()));
             }
         } catch { /* */ }
     };
@@ -110,10 +115,33 @@ export default function DashboardClient() {
                 method: "POST",
                 headers: { "Content-Type": "application/json" }
             });
-            setTimeout(fetchStatus, 2000);
+
+            // Poll status until the expected state is reached
+            const targetRunning = action === "start" || action === "restart";
+            const maxWait = 60000; // 60s max wait
+            const pollInterval = 1500;
+            const startTime = Date.now();
+
+            const pollUntilReady = async () => {
+                while (Date.now() - startTime < maxWait) {
+                    await new Promise(r => setTimeout(r, pollInterval));
+                    try {
+                        const res = await fetch("/api/server/status");
+                        const data = await res.json();
+                        setStatus({ running: data.running, playerCount: data.playerCount });
+                        if (data.players) setPlayers(data.players);
+
+                        if (action === "stop" && !data.running) return;
+                        if ((action === "start" || action === "restart") && data.running) return;
+                    } catch { /* */ }
+                }
+            };
+
+            await pollUntilReady();
         } catch { /* */ }
         finally {
             setIsActioning(null);
+            fetchLogs();
         }
     };
 
@@ -135,11 +163,15 @@ export default function DashboardClient() {
     };
 
     const formatLog = (log: string) => {
-        // Simple colorization for info/warn/error
         if (log.includes("WARN")) return <span className="text-[#F8B84E]">{log}</span>;
         if (log.includes("ERROR") || log.includes("Exception")) return <span className="text-[#FF6B6B]">{log}</span>;
         if (log.includes("Server thread/INFO")) return <span className="text-[#B9C1D1]">{log}</span>;
         return <span className="text-[#828D9F]">{log}</span>;
+    };
+
+    const fmtMB = (mb: number) => {
+        if (mb >= 1024) return `${(mb / 1024).toFixed(1)} GB`;
+        return `${mb} MB`;
     };
 
     return (
@@ -214,8 +246,8 @@ export default function DashboardClient() {
                         </span>
                     </div>
                     <div className="flex items-end gap-2 mb-2">
-                        <span className="text-2xl font-bold text-[#FFFFFF]">{resources.memoryUsage}</span>
-                        <span className="text-[#828D9F] font-medium mb-1">/ {resources.memoryLimit} GB</span>
+                        <span className="text-2xl font-bold text-[#FFFFFF]">{fmtMB(resources.memoryUsedMB)}</span>
+                        <span className="text-[#828D9F] font-medium mb-1">/ {fmtMB(resources.memoryTotalMB)}</span>
                     </div>
                     <div className="w-full h-2 bg-[#121418] rounded-full overflow-hidden">
                         <div
@@ -234,16 +266,16 @@ export default function DashboardClient() {
                         </div>
                     </div>
                     <div className="flex items-end gap-2 mb-2">
-                        <span className="text-2xl font-bold text-[#FFFFFF]">{resources.storageUsage}</span>
-                        <span className="text-[#828D9F] font-medium mb-1">/ {resources.storageLimit} GB</span>
+                        <span className="text-2xl font-bold text-[#FFFFFF]">{fmtMB(resources.diskUsedMB)}</span>
+                        <span className="text-[#828D9F] font-medium mb-1">/ {fmtMB(resources.diskTotalMB)}</span>
                     </div>
                     <div className="w-full h-2 bg-[#121418] rounded-full overflow-hidden">
-                        <div className="h-full bg-[#6B46C1] rounded-full" style={{ width: `${resources.storagePercent}%` }}></div>
+                        <div className="h-full bg-[#6B46C1] rounded-full transition-all duration-500" style={{ width: `${resources.diskPercent}%` }}></div>
                     </div>
-                </div >
+                </div>
 
                 {/* Network Card */}
-                < div className="bg-[#1A1D24] border border-[#333947] rounded-xl p-5" >
+                <div className="bg-[#1A1D24] border border-[#333947] rounded-xl p-5">
                     <div className="flex justify-between items-center mb-4">
                         <div className="flex items-center gap-2 text-[#B9C1D1]">
                             <i className="fa-solid fa-network-wired"></i>
@@ -260,13 +292,13 @@ export default function DashboardClient() {
                             <span className="text-lg font-bold text-[#FFFFFF]">{status.running ? resources.netOut : "0.0"} <span className="text-xs text-[#828D9F] font-normal">MB/s</span></span>
                         </div>
                     </div>
-                </div >
-            </div >
+                </div>
+            </div>
 
             {/* Live Console Card */}
-            < div className="bg-[#090A0C] border border-[#333947] rounded-xl flex flex-col shadow-2xl h-[450px]" >
+            <div className="bg-[#090A0C] border border-[#333947] rounded-xl flex flex-col shadow-2xl h-[450px]">
                 {/* Console Header */}
-                < div className="px-4 py-3 border-b border-[#333947] flex justify-between items-center bg-[#1A1D24]/50 rounded-t-xl" >
+                <div className="px-4 py-3 border-b border-[#333947] flex justify-between items-center bg-[#1A1D24]/50 rounded-t-xl">
                     <div className="flex items-center gap-2">
                         <i className="fa-solid fa-terminal text-[#B9C1D1]"></i>
                         <h3 className="font-medium text-[#FFFFFF] text-sm">Live Server Console</h3>
@@ -283,10 +315,10 @@ export default function DashboardClient() {
                             <i className="fa-solid fa-up-right-from-square text-sm"></i>
                         </Link>
                     </div>
-                </div >
+                </div>
 
                 {/* Console Output (Scrollable) */}
-                < div
+                <div
                     ref={terminalRef}
                     className="flex-1 p-4 font-mono text-[13px] leading-relaxed text-[#B9C1D1] overflow-y-auto terminal-scroll whitespace-pre-wrap break-all"
                 >
@@ -301,10 +333,10 @@ export default function DashboardClient() {
                             ))
                         )
                     }
-                </div >
+                </div>
 
                 {/* Console Input */}
-                < form onSubmit={handleCommand} className="border-t border-[#333947] p-2 flex bg-[#1A1D24]/50 rounded-b-xl" >
+                <form onSubmit={handleCommand} className="border-t border-[#333947] p-2 flex bg-[#1A1D24]/50 rounded-b-xl">
                     <div className="flex-1 flex items-center bg-[#090A0C] border border-[#333947] rounded-md overflow-hidden focus-within:border-[#F8B84E] focus-within:ring-1 focus-within:ring-[#F8B84E] transition-all">
                         <span className="pl-3 text-[#f1fa8c] font-mono text-sm">{">"}</span>
                         <input
@@ -324,9 +356,9 @@ export default function DashboardClient() {
                     >
                         Send
                     </button>
-                </form >
-            </div >
+                </form>
+            </div>
 
-        </div >
+        </div>
     );
 }

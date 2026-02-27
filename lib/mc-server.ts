@@ -85,10 +85,12 @@ export function startServer(): {
         };
     }
 
-    // Verify server.jar exists
-    const jarPath = path.join(MC_DIR, "server.jar");
+    // Detect active loader jar
+    const { jarFile } = getLoaderInfo();
+    const jarPath = path.join(MC_DIR, jarFile);
+
     if (!fs.existsSync(jarPath)) {
-        return { success: false, message: "server.jar not found in minecraft directory" };
+        return { success: false, message: `Executable jar (${jarFile}) not found in minecraft directory` };
     }
 
     state.logs = [];
@@ -97,7 +99,7 @@ export function startServer(): {
 
     const child = spawn(
         "java",
-        ["-Xmx1G", "-Xms1G", "-jar", "server.jar", "nogui"],
+        ["-Xmx1G", "-Xms1G", "-jar", jarFile, "nogui"],
         {
             cwd: MC_DIR,
             stdio: ["pipe", "pipe", "pipe"],

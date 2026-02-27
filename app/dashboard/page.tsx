@@ -111,10 +111,18 @@ export default function DashboardClient() {
     const handleAction = async (action: string) => {
         setIsActioning(action);
         try {
-            await fetch(`/api/server/${action}`, {
+            const req = await fetch(`/api/server/${action}`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" }
             });
+            const data = await req.json();
+
+            if (!req.ok || !data.success) {
+                // If the command itself failed (e.g. no server.jar), don't poll, just abort
+                alert(`Action Failed: ${data.message || "Unknown error"}`);
+                setIsActioning(null);
+                return;
+            }
 
             // Poll status until the expected state is reached
             const targetRunning = action === "start" || action === "restart";
@@ -130,6 +138,9 @@ export default function DashboardClient() {
                         const data = await res.json();
                         setStatus({ running: data.running, playerCount: data.playerCount });
                         if (data.players) setPlayers(data.players);
+
+                        // Ensure console logs stream live during the startup/shutdown sequence
+                        await fetchLogs();
 
                         if (action === "stop" && !data.running) return;
                         if ((action === "start" || action === "restart") && data.running) return;

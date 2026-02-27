@@ -157,8 +157,12 @@ export default function FilesPage() {
     };
 
     const handleRename = async (oldPath: string, newVal: string) => {
+        if (renamingItem !== oldPath) return; // Prevent double firing from onBlur + onKeyDown
+        setRenamingItem(null);                // Immediately clear input mode
+
         const oldName = oldPath.split("/").pop();
-        if (!newVal.trim() || newVal.trim() === oldName) { setRenamingItem(null); return; }
+        if (!newVal.trim() || newVal.trim() === oldName) return;
+
         const parentPath = oldPath.split("/").slice(0, -1).join("/");
         const newPath = parentPath ? `${parentPath}/${newVal.trim()}` : newVal.trim();
         try {
@@ -175,14 +179,37 @@ export default function FilesPage() {
                 msg(d.message, 'error');
             }
         } catch { msg("Rename failed", 'error'); }
-        finally { setRenamingItem(null); }
     };
 
     const handlePaste = async () => {
         if (!clipboard) return;
         setPasting(true);
         const fileName = clipboard.path.split("/").pop() || "unknown";
-        const newPath = curPath ? `${curPath}/${fileName}` : fileName;
+
+        // Smart name resolution for standard copy-paste mechanics
+        let finalName = fileName;
+        if (!clipboard.isCut) {
+            const nameWithoutExt = fileName.includes('.') ? fileName.substring(0, fileName.lastIndexOf('.')) : fileName;
+            const ext = fileName.includes('.') ? fileName.substring(fileName.lastIndexOf('.')) : '';
+            let counter = 0;
+            const existingFiles = new Set(files.map(f => f.name));
+
+            // Loop until we find a name that doesn't exist in the current directory
+            while (existingFiles.has(finalName)) {
+                counter++;
+                finalName = `${nameWithoutExt} - Copy${counter > 1 ? ` (${counter})` : ''}${ext}`;
+            }
+        }
+
+        const newPath = curPath ? `${curPath}/${finalName}` : finalName;
+
+        // Cutting to the same location does nothing
+        if (clipboard.isCut && clipboard.path === newPath) {
+            msg("Moved successfully", 'success');
+            setClipboard(null);
+            setPasting(false);
+            return;
+        }
 
         try {
             if (clipboard.isCut) {

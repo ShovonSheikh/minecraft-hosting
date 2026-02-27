@@ -1,20 +1,13 @@
-[17:15:44] [ServerMain/INFO]: Environment: Environment[sessionHost=https://sessionserver.mojang.com, servicesHost=https://api.minecraftservices.com, profilesHost=https://api.mojang.com, name=PROD]
-[17:15:47] [ServerMain/INFO]: Loaded 1470 recipes
-[17:15:47] [ServerMain/INFO]: Loaded 1584 advancements
-[17:15:47] [Server thread/INFO]: Starting minecraft server version 1.21.11
-[17:15:47] [Server thread/INFO]: Loading properties
-[17:15:47] [Server thread/INFO]: Default game type: SURVIVAL
-[17:15:47] [Server thread/INFO]: Generating keypair
-[17:15:47] [Server thread/INFO]: Starting Minecraft server on *:25565
-[17:15:47] [Server thread/INFO]: Preparing level "world"
-[17:15:48] [Server thread/INFO]: Loading 0 persistent chunks...
-[17:15:48] [Server thread/INFO]: Preparing spawn area: 100%
-[17:15:48] [Server thread/INFO]: Time elapsed: 13 ms
-[17:15:48] [Server thread/INFO]: Done (0.469s)! For help, type "help"
-[17:16:48] [Server thread/INFO]: Server empty for 60 seconds, pausing
-[17:17:26] [User Authenticator #1/INFO]: UUID of player ItzDevShovon is 6595f561-69b4-486c-9a08-297a6165d679
-[17:17:29] [Server thread/INFO]: ItzDevShovon[/127.0.0.1:6495] logged in with entity id 75 at (-155.74931561995487, 73.03351124214915, 39.22793166705143)
-[17:17:29] [Server thread/INFO]: ItzDevShovon joined the game
-[17:17:35] [Server thread/WARN]: Can't keep up! Is the server overloaded? Running 2072ms or 41 ticks behind
-[17:18:55] [Server thread/INFO]: ItzDevShovon lost connection: Disconnected
-[17:18:55] [Server thread/INFO]: ItzDevShovon left the game
+[19:25:22] [ServerMain/INFO]: Environment: Environment[sessionHost=https://sessionserver.mojang.com, servicesHost=https://api.minecraftservices.com, profilesHost=https://api.mojang.com, name=PROD]
+[19:25:25] [ServerMain/INFO]: Loaded 1470 recipes
+[19:25:25] [ServerMain/INFO]: Loaded 1584 advancements
+[19:25:25] [Server thread/INFO]: Starting minecraft server version 1.21.11
+[19:25:25] [Server thread/INFO]: Loading properties
+[19:25:25] [Server thread/INFO]: Default game type: SURVIVAL
+[19:25:25] [Server thread/INFO]: Generating keypair
+[19:25:25] [Server thread/INFO]: Starting Minecraft server on *:25565
+[19:25:25] [Server thread/INFO]: Preparing level "world"
+[19:25:26] [Server thread/INFO]: Loading 0 persistent chunks...
+[19:25:26] [Server thread/INFO]: Preparing spawn area: 100%
+[19:25:26] [Server thread/INFO]: Time elapsed: 13 ms
+[19:25:26] [Server thread/INFO]: Done (0.426s)! For help, type "help"

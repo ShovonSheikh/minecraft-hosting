@@ -1,0 +1,7 @@
+{
+    "functions": {
+        "app/api/start-mc/route.js": {
+            "maxDuration": 60
+        }
+    }
+}

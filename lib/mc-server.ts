@@ -1,0 +1,573 @@
+import { spawn, ChildProcess } from "child_process";
+import path from "path";
+import fs from "fs";
+
+const MC_DIR = path.join(process.cwd(), "minecraft");
+const MAX_LOG_LINES = 500;
+
+interface ServerState {
+    process: ChildProcess | null;
+    logs: string[];
+    players: Set<string>;
+    startedAt: number | null;
+    version: string | null;
+}
+
+const state: ServerState = {
+    process: null,
+    logs: [],
+    players: new Set(),
+    startedAt: null,
+    version: null,
+};
+
+function parseLine(line: string) {
+    // Player join: [Server thread/INFO]: PlayerName joined the game
+    const joinMatch = line.match(
+        /\[Server thread\/INFO\]:\s+(\S+) joined the game/
+    );
+    if (joinMatch) {
+        state.players.add(joinMatch[1]);
+    }
+
+    // Player leave: [Server thread/INFO]: PlayerName left the game
+    const leaveMatch = line.match(
+        /\[Server thread\/INFO\]:\s+(\S+) left the game/
+    );
+    if (leaveMatch) {
+        state.players.delete(leaveMatch[1]);
+    }
+
+    // Server version: [Server thread/INFO]: Starting minecraft server version X.X.X
+    const versionMatch = line.match(
+        /Starting minecraft server version\s+(.+)/
+    );
+    if (versionMatch) {
+        state.version = versionMatch[1];
+    }
+}
+
+function appendLog(data: string) {
+    const lines = data.split(/\r?\n/).filter((l) => l.trim().length > 0);
+    for (const line of lines) {
+        parseLine(line);
+        state.logs.push(line);
+        if (state.logs.length > MAX_LOG_LINES) {
+            state.logs.shift();
+        }
+    }
+}
+
+export function startServer(): {
+    success: boolean;
+    message: string;
+    pid?: number;
+} {
+    if (state.process && !state.process.killed) {
+        return { success: false, message: "Server is already running" };
+    }
+
+    // Verify server.jar exists
+    const jarPath = path.join(MC_DIR, "server.jar");
+    if (!fs.existsSync(jarPath)) {
+        return { success: false, message: "server.jar not found in minecraft directory" };
+    }
+
+    state.logs = [];
+    state.players.clear();
+    state.version = null;
+
+    const child = spawn(
+        "java",
+        ["-Xmx1G", "-Xms1G", "-jar", "server.jar", "nogui"],
+        {
+            cwd: MC_DIR,
+            stdio: ["pipe", "pipe", "pipe"],
+        }
+    );
+
+    state.process = child;
+    state.startedAt = Date.now();
+
+    child.stdout?.on("data", (data: Buffer) => {
+        appendLog(data.toString());
+    });
+
+    child.stderr?.on("data", (data: Buffer) => {
+        appendLog(data.toString());
+    });
+
+    child.on("exit", (code) => {
+        appendLog(`[MCPanel] Server process exited with code ${code}`);
+        state.process = null;
+        state.startedAt = null;
+        state.players.clear();
+    });
+
+    child.on("error", (err) => {
+        appendLog(`[MCPanel] Process error: ${err.message}`);
+        state.process = null;
+        state.startedAt = null;
+    });
+
+    return {
+        success: true,
+        message: "Server starting",
+        pid: child.pid,
+    };
+}
+
+export function stopServer(): { success: boolean; message: string } {
+    if (!state.process || state.process.killed) {
+        return { success: false, message: "Server is not running" };
+    }
+
+    sendCommand("stop");
+    return { success: true, message: "Stop command sent" };
+}
+
+export async function restartServer(): Promise<{
+    success: boolean;
+    message: string;
+    pid?: number;
+}> {
+    if (state.process && !state.process.killed) {
+        sendCommand("stop");
+
+        // Wait for the process to exit (max 15 seconds)
+        await new Promise<void>((resolve) => {
+            const timeout = setTimeout(() => {
+                // Force kill if it hasn't stopped
+                if (state.process && !state.process.killed) {
+                    state.process.kill("SIGKILL");
+                }
+                resolve();
+            }, 15000);
+
+            const check = setInterval(() => {
+                if (!state.process || state.process.killed) {
+                    clearInterval(check);
+                    clearTimeout(timeout);
+                    resolve();
+                }
+            }, 500);
+        });
+    }
+
+    return startServer();
+}
+
+export function sendCommand(command: string): {
+    success: boolean;
+    message: string;
+} {
+    if (!state.process || state.process.killed) {
+        return { success: false, message: "Server is not running" };
+    }
+
+    if (!state.process.stdin?.writable) {
+        return { success: false, message: "Server stdin is not writable" };
+    }
+
+    state.process.stdin.write(command + "\n");
+    appendLog(`> ${command}`);
+    return { success: true, message: `Command sent: ${command}` };
+}
+
+export function getStatus() {
+    const running = !!(state.process && !state.process.killed);
+    return {
+        running,
+        pid: state.process?.pid ?? null,
+        uptime: state.startedAt ? Math.floor((Date.now() - state.startedAt) / 1000) : null,
+        players: Array.from(state.players),
+        playerCount: state.players.size,
+        version: state.version,
+    };
+}
+
+export function getLogs(lines: number = 100): string[] {
+    return state.logs.slice(-lines);
+}
+
+export function getProperties(): Record<string, string> {
+    const propsPath = path.join(MC_DIR, "server.properties");
+    if (!fs.existsSync(propsPath)) {
+        return {};
+    }
+
+    const content = fs.readFileSync(propsPath, "utf-8");
+    const props: Record<string, string> = {};
+
+    for (const line of content.split(/\r?\n/)) {
+        const trimmed = line.trim();
+        if (trimmed.startsWith("#") || !trimmed.includes("=")) continue;
+        const eqIndex = trimmed.indexOf("=");
+        const key = trimmed.substring(0, eqIndex);
+        const value = trimmed.substring(eqIndex + 1);
+        props[key] = value;
+    }
+
+    return props;
+}
+
+export function setProperties(
+    updates: Record<string, string>
+): { success: boolean; message: string } {
+    const propsPath = path.join(MC_DIR, "server.properties");
+    if (!fs.existsSync(propsPath)) {
+        return { success: false, message: "server.properties not found" };
+    }
+
+    let content = fs.readFileSync(propsPath, "utf-8");
+
+    for (const [key, value] of Object.entries(updates)) {
+        const regex = new RegExp(`^${key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}=.*$`, "m");
+        if (regex.test(content)) {
+            content = content.replace(regex, `${key}=${value}`);
+        } else {
+            content += `\n${key}=${value}`;
+        }
+    }
+
+    fs.writeFileSync(propsPath, content, "utf-8");
+    return {
+        success: true,
+        message: "Properties updated. Restart the server for changes to take effect.",
+    };
+}
+
+// ═══════════════════════════════════════
+// PLUGIN MANAGEMENT
+// ═══════════════════════════════════════
+
+export interface PluginInfo {
+    name: string;
+    filename: string;
+    enabled: boolean;
+    size: number;
+}
+
+export function getPlugins(): PluginInfo[] {
+    const pluginsDir = path.join(MC_DIR, "plugins");
+    if (!fs.existsSync(pluginsDir)) {
+        fs.mkdirSync(pluginsDir, { recursive: true });
+        return [];
+    }
+
+    const files = fs.readdirSync(pluginsDir);
+    const plugins: PluginInfo[] = [];
+
+    for (const file of files) {
+        const isJar = file.endsWith(".jar");
+        const isDisabled = file.endsWith(".jar.disabled");
+
+        if (!isJar && !isDisabled) continue;
+
+        const filePath = path.join(pluginsDir, file);
+        const stats = fs.statSync(filePath);
+        const name = file.replace(/\.jar(\.disabled)?$/, "");
+
+        plugins.push({
+            name,
+            filename: file,
+            enabled: isJar && !isDisabled,
+            size: stats.size,
+        });
+    }
+
+    return plugins.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+export function togglePlugin(filename: string): { success: boolean; message: string } {
+    const pluginsDir = path.join(MC_DIR, "plugins");
+    const filePath = path.join(pluginsDir, filename);
+
+    if (!fs.existsSync(filePath)) {
+        return { success: false, message: `Plugin ${filename} not found` };
+    }
+
+    let newPath: string;
+    let action: string;
+
+    if (filename.endsWith(".jar.disabled")) {
+        // Enable: remove .disabled
+        newPath = path.join(pluginsDir, filename.replace(".jar.disabled", ".jar"));
+        action = "enabled";
+    } else if (filename.endsWith(".jar")) {
+        // Disable: add .disabled
+        newPath = path.join(pluginsDir, filename + ".disabled");
+        action = "disabled";
+    } else {
+        return { success: false, message: "Invalid plugin file" };
+    }
+
+    fs.renameSync(filePath, newPath);
+    return { success: true, message: `Plugin ${action}. Restart server to apply.` };
+}
+
+export function deletePlugin(filename: string): { success: boolean; message: string } {
+    const pluginsDir = path.join(MC_DIR, "plugins");
+    const filePath = path.join(pluginsDir, filename);
+
+    if (!fs.existsSync(filePath)) {
+        return { success: false, message: `Plugin ${filename} not found` };
+    }
+
+    fs.unlinkSync(filePath);
+    return { success: true, message: `Plugin ${filename} deleted.` };
+}
+
+// ═══════════════════════════════════════
+// FILE MANAGEMENT
+// ═══════════════════════════════════════
+
+export interface FileItem {
+    name: string;
+    path: string;
+    isDirectory: boolean;
+    size: number;
+}
+
+export function getFiles(relativePath: string = ""): FileItem[] {
+    const targetDir = path.join(MC_DIR, relativePath);
+
+    // Security: prevent directory traversal
+    const resolved = path.resolve(targetDir);
+    if (!resolved.startsWith(path.resolve(MC_DIR))) {
+        return [];
+    }
+
+    if (!fs.existsSync(targetDir) || !fs.statSync(targetDir).isDirectory()) {
+        return [];
+    }
+
+    const entries = fs.readdirSync(targetDir, { withFileTypes: true });
+    const items: FileItem[] = [];
+
+    for (const entry of entries) {
+        // Skip hidden files and node_modules-like dirs
+        if (entry.name.startsWith(".")) continue;
+
+        const fullPath = path.join(targetDir, entry.name);
+        const relPath = path.join(relativePath, entry.name).replace(/\\/g, "/");
+        const stats = fs.statSync(fullPath);
+
+        items.push({
+            name: entry.name,
+            path: relPath,
+            isDirectory: entry.isDirectory(),
+            size: stats.size,
+        });
+    }
+
+    // Directories first, then files
+    return items.sort((a, b) => {
+        if (a.isDirectory && !b.isDirectory) return -1;
+        if (!a.isDirectory && b.isDirectory) return 1;
+        return a.name.localeCompare(b.name);
+    });
+}
+
+export function readFile(relativePath: string): { success: boolean; content?: string; message?: string } {
+    const filePath = path.join(MC_DIR, relativePath);
+
+    // Security check
+    const resolved = path.resolve(filePath);
+    if (!resolved.startsWith(path.resolve(MC_DIR))) {
+        return { success: false, message: "Access denied" };
+    }
+
+    if (!fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) {
+        return { success: false, message: "File not found" };
+    }
+
+    // Check if it's a binary file (only allow text files)
+    const ext = path.extname(filePath).toLowerCase();
+    const textExts = [".properties", ".json", ".yml", ".yaml", ".txt", ".log", ".cfg", ".conf", ".toml", ".md", ".csv", ".xml", ".html", ".css", ".js", ".ts", ".sh", ".bat", ".cmd"];
+    if (!textExts.includes(ext) && ext !== "") {
+        return { success: false, message: "Binary files cannot be edited" };
+    }
+
+    try {
+        const content = fs.readFileSync(filePath, "utf-8");
+        return { success: true, content };
+    } catch {
+        return { success: false, message: "Failed to read file" };
+    }
+}
+
+export function writeFile(relativePath: string, content: string): { success: boolean; message: string } {
+    const filePath = path.join(MC_DIR, relativePath);
+
+    // Security check
+    const resolved = path.resolve(filePath);
+    if (!resolved.startsWith(path.resolve(MC_DIR))) {
+        return { success: false, message: "Access denied" };
+    }
+
+    try {
+        fs.writeFileSync(filePath, content, "utf-8");
+        return { success: true, message: "File saved" };
+    } catch {
+        return { success: false, message: "Failed to write file" };
+    }
+}
+
+// ═══════════════════════════════════════
+// LOADER INFO
+// ═══════════════════════════════════════
+
+export interface LoaderInfo {
+    type: "vanilla" | "paper" | "fabric" | "forge" | "quilt" | "unknown";
+    jarFile: string;
+    size: number;
+}
+
+export function getLoaderInfo(): LoaderInfo {
+    // Check for known jar files
+    const files = fs.readdirSync(MC_DIR);
+    let jarFile = "server.jar";
+    let type: LoaderInfo["type"] = "vanilla";
+
+    for (const file of files) {
+        const lower = file.toLowerCase();
+        if (lower.includes("paper") && lower.endsWith(".jar")) {
+            type = "paper";
+            jarFile = file;
+        } else if (lower.includes("fabric") && lower.endsWith(".jar")) {
+            type = "fabric";
+            jarFile = file;
+        } else if (lower.includes("forge") && lower.endsWith(".jar")) {
+            type = "forge";
+            jarFile = file;
+        } else if (lower.includes("quilt") && lower.endsWith(".jar")) {
+            type = "quilt";
+            jarFile = file;
+        }
+    }
+
+    const jarPath = path.join(MC_DIR, jarFile);
+    const size = fs.existsSync(jarPath) ? fs.statSync(jarPath).size : 0;
+
+    return { type, jarFile, size };
+}
+
+// ═══════════════════════════════════════
+// RESOURCE MONITORING
+// ═══════════════════════════════════════
+
+export interface ResourceInfo {
+    memoryUsedMB: number;
+    memoryTotalMB: number;
+    memoryPercent: number;
+    diskUsedMB: number;
+    diskFreeMB: number;
+    diskPercent: number;
+    cpuPercent: number;
+    serverMemoryMB: number | null;
+}
+
+export function getResources(): ResourceInfo {
+    const os = require("os");
+    const totalMem = os.totalmem();
+    const freeMem = os.freemem();
+    const usedMem = totalMem - freeMem;
+
+    // Disk usage for MC directory
+    let diskUsed = 0;
+    try {
+        diskUsed = getDirSizeRecursive(MC_DIR);
+    } catch { /* */ }
+
+    // Estimate CPU from load average (or 0 on Windows)
+    const loadAvg = os.loadavg();
+    const cpuCount = os.cpus().length;
+    const cpuPercent = Math.min(100, Math.round((loadAvg[0] / cpuCount) * 100));
+
+    // Server process memory
+    let serverMemMB: number | null = null;
+    if (state.process && !state.process.killed && state.process.pid) {
+        try {
+            const usage = process.memoryUsage();
+            serverMemMB = Math.round(usage.heapUsed / 1024 / 1024);
+        } catch { /* */ }
+    }
+
+    return {
+        memoryUsedMB: Math.round(usedMem / 1024 / 1024),
+        memoryTotalMB: Math.round(totalMem / 1024 / 1024),
+        memoryPercent: Math.round((usedMem / totalMem) * 100),
+        diskUsedMB: Math.round(diskUsed / 1024 / 1024),
+        diskFreeMB: 0, // Will be calculated on the frontend
+        diskPercent: 0,
+        cpuPercent,
+        serverMemoryMB: serverMemMB,
+    };
+}
+
+function getDirSizeRecursive(dir: string): number {
+    let size = 0;
+    if (!fs.existsSync(dir)) return 0;
+    try {
+        const entries = fs.readdirSync(dir, { withFileTypes: true });
+        for (const entry of entries) {
+            const fullPath = path.join(dir, entry.name);
+            if (entry.isDirectory()) {
+                size += getDirSizeRecursive(fullPath);
+            } else {
+                size += fs.statSync(fullPath).size;
+            }
+        }
+    } catch { /* */ }
+    return size;
+}
+
+// ═══════════════════════════════════════
+// WORLD MANAGEMENT
+// ═══════════════════════════════════════
+
+export interface WorldInfo {
+    name: string;
+    path: string;
+    size: number;
+    isDefault: boolean;
+    hasNether: boolean;
+    hasEnd: boolean;
+}
+
+export function getWorlds(): WorldInfo[] {
+    const props = getProperties();
+    const defaultWorld = props["level-name"] || "world";
+    const worlds: WorldInfo[] = [];
+
+    if (!fs.existsSync(MC_DIR)) return worlds;
+
+    const entries = fs.readdirSync(MC_DIR, { withFileTypes: true });
+
+    for (const entry of entries) {
+        if (!entry.isDirectory()) continue;
+
+        // Check if it looks like a world directory (contains level.dat)
+        const levelDat = path.join(MC_DIR, entry.name, "level.dat");
+        if (!fs.existsSync(levelDat)) continue;
+
+        const worldPath = path.join(MC_DIR, entry.name);
+        const hasNether = fs.existsSync(path.join(MC_DIR, entry.name + "_nether")) ||
+            fs.existsSync(path.join(worldPath, "DIM-1"));
+        const hasEnd = fs.existsSync(path.join(MC_DIR, entry.name + "_the_end")) ||
+            fs.existsSync(path.join(worldPath, "DIM1"));
+
+        worlds.push({
+            name: entry.name,
+            path: entry.name,
+            size: getDirSizeRecursive(worldPath),
+            isDefault: entry.name === defaultWorld,
+            hasNether,
+            hasEnd,
+        });
+    }
+
+    return worlds.sort((a, b) => (a.isDefault ? -1 : b.isDefault ? 1 : a.name.localeCompare(b.name)));
+}
+

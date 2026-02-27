@@ -32,6 +32,7 @@ export default function DomainsPage() {
     const [toast, setToast] = useState<string | null>(null);
     const [copied, setCopied] = useState<string | null>(null);
     const [detectedIp, setDetectedIp] = useState<string | null>(null);
+    const [detecting, setDetecting] = useState(false);
     const msg = (m: string) => { setToast(m); setTimeout(() => setToast(null), 3500); };
 
     const fetchConfig = useCallback(async () => {
@@ -45,6 +46,26 @@ export default function DomainsPage() {
             if (data.detectedIp) setDetectedIp(data.detectedIp);
         } catch { /* */ }
         finally { setLoading(false); }
+    }, []);
+
+    const detectIp = useCallback(async () => {
+        setDetecting(true);
+        try {
+            const res = await fetch("/api/server/domains?detect=true");
+            const data = await res.json();
+            if (data.detectedIp) {
+                setDetectedIp(data.detectedIp);
+                // Also refresh config since detected IP was persisted
+                setConfig(data.config);
+                setOrig(data.config);
+                setRecords(data.dns?.records || []);
+                setInstructions(data.dns?.instructions || []);
+                msg(`Detected IP: ${data.detectedIp}`);
+            } else {
+                msg("Could not detect public IP");
+            }
+        } catch { msg("IP detection failed"); }
+        finally { setDetecting(false); }
     }, []);
 
     useEffect(() => { fetchConfig(); }, [fetchConfig]);
@@ -141,10 +162,15 @@ export default function DomainsPage() {
                             <input className="input input-mono" placeholder="e.g. 203.0.113.45" value={config.serverIp}
                                 onChange={e => setConfig(c => ({ ...c, serverIp: e.target.value }))}
                                 style={{ flex: 1, ...(config.serverIp !== (orig?.serverIp ?? "") ? { borderColor: "var(--amber)", boxShadow: "0 0 0 2px var(--amber-dim)" } : {}) }} />
-                            {detectedIp && detectedIp !== "127.0.0.1" && (
+                            {detectedIp && detectedIp !== "127.0.0.1" ? (
                                 <button className="btn btn-outline btn-sm" style={{ whiteSpace: "nowrap", fontSize: 11 }}
                                     onClick={() => setConfig(c => ({ ...c, serverIp: detectedIp }))}>
                                     Use detected: {detectedIp}
+                                </button>
+                            ) : (
+                                <button className="btn btn-outline btn-sm" style={{ whiteSpace: "nowrap", fontSize: 11 }}
+                                    onClick={detectIp} disabled={detecting}>
+                                    {detecting ? <span className="spinner" /> : "🔍 Detect IP"}
                                 </button>
                             )}
                         </div>

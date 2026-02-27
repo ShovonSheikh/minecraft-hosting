@@ -1,9 +1,18 @@
-import { spawn, ChildProcess } from "child_process";
+import { spawn, ChildProcess, execSync } from "child_process";
 import path from "path";
 import fs from "fs";
 
 const MC_DIR = path.join(process.cwd(), "minecraft");
 const MAX_LOG_LINES = 500;
+
+function isJavaAvailable(): boolean {
+    try {
+        execSync("java -version", { stdio: "pipe" });
+        return true;
+    } catch {
+        return false;
+    }
+}
 
 interface ServerState {
     process: ChildProcess | null;
@@ -65,6 +74,14 @@ export function startServer(): {
 } {
     if (state.process && !state.process.killed) {
         return { success: false, message: "Server is already running" };
+    }
+
+    // Check if Java is installed
+    if (!isJavaAvailable()) {
+        return {
+            success: false,
+            message: "Java is not installed or not found in PATH. Please install Java 17+ to run the Minecraft server.",
+        };
     }
 
     // Verify server.jar exists

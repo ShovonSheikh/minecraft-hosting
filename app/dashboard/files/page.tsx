@@ -268,10 +268,10 @@ export default function FilesPage() {
                 </div>
             </div>
 
-            <div className="card p-0 flex flex-col md:flex-row shadow-xl" style={{ minHeight: "600px", height: "calc(100vh - 200px)", overflow: "hidden" }}>
+            <div className="card p-0 flex flex-col md:flex-row shadow-xl" style={{ flex: 1, minHeight: "500px", overflow: "hidden" }}>
                 {/* File List */}
-                <div style={{ width: "350px", borderRight: "1px solid var(--border)", display: "flex", flexDirection: "column", backgroundColor: "var(--bg-elevated)", flexShrink: 0 }}>
-                    <div className="terminal-scroll" style={{ overflowY: "auto", flex: 1 }}>
+                <div style={{ width: "350px", borderRight: "1px solid var(--border)", display: "flex", flexDirection: "column", backgroundColor: "var(--bg-elevated)", flexShrink: 0, minHeight: 0 }}>
+                    <div className="terminal-scroll" style={{ overflowY: "auto", flex: 1, minHeight: 0 }}>
                         <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left" }}>
                             <tbody>
                                 {curPath && (
@@ -327,14 +327,16 @@ export default function FilesPage() {
                                                 )}
                                             </td>
                                             <td style={{ padding: "12px 16px", textAlign: "right", whiteSpace: "nowrap" }}>
-                                                <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: "6px", opacity: 0, transition: "opacity 0.2s" }} className="group-hover:opacity-100">
-                                                    <button onClick={(e) => { e.stopPropagation(); setClipboard({ path: f.path, isCut: false }); msg("Copied to clipboard", 'success'); }} className="btn btn-sm btn-secondary" style={{ padding: "4px 8px" }} title="Copy"><i className="fa-regular fa-copy"></i></button>
-                                                    <button onClick={(e) => { e.stopPropagation(); startRename(f); }} className="btn btn-sm btn-secondary" style={{ padding: "4px 8px" }} title="Rename"><i className="fa-solid fa-pen"></i></button>
-                                                    <button onClick={(e) => { e.stopPropagation(); handleDelete(f.path, f.isDirectory); }} disabled={deleting === f.path} className="btn btn-sm btn-danger" style={{ padding: "4px 8px" }} title="Delete">
-                                                        {deleting === f.path ? <i className="fa-solid fa-circle-notch fa-spin"></i> : <i className="fa-solid fa-trash"></i>}
-                                                    </button>
+                                                <div style={{ position: "relative", display: "flex", justifyContent: "flex-end", alignItems: "center", minHeight: "28px" }}>
+                                                    <div style={{ position: "absolute", right: 0, display: "flex", alignItems: "center", gap: "6px", opacity: 0, transition: "opacity 0.2s", backgroundColor: isSelected ? "var(--bg-main)" : "var(--bg-elevated)" }} className={`group-hover:opacity-100 ${isSelected ? "bg-[var(--bg-main)]" : "group-hover:bg-[var(--bg-main)]"}`}>
+                                                        <button onClick={(e) => { e.stopPropagation(); setClipboard({ path: f.path, isCut: false }); msg("Copied to clipboard", 'success'); }} className="btn btn-sm btn-secondary" style={{ padding: "4px 8px" }} title="Copy"><i className="fa-regular fa-copy"></i></button>
+                                                        <button onClick={(e) => { e.stopPropagation(); startRename(f); }} className="btn btn-sm btn-secondary" style={{ padding: "4px 8px" }} title="Rename"><i className="fa-solid fa-pen"></i></button>
+                                                        <button onClick={(e) => { e.stopPropagation(); handleDelete(f.path, f.isDirectory); }} disabled={deleting === f.path} className="btn btn-sm btn-danger" style={{ padding: "4px 8px" }} title="Delete">
+                                                            {deleting === f.path ? <i className="fa-solid fa-circle-notch fa-spin"></i> : <i className="fa-solid fa-trash"></i>}
+                                                        </button>
+                                                    </div>
+                                                    {!f.isDirectory && <span style={{ fontSize: "0.8rem", color: "var(--text-muted)", transition: "opacity 0.2s" }} className="group-hover:opacity-0">{fmtSize(f.size)}</span>}
                                                 </div>
-                                                {!f.isDirectory && <span style={{ fontSize: "0.8rem", color: "var(--text-muted)" }} className="group-hover:hidden">{fmtSize(f.size)}</span>}
                                             </td>
                                         </tr>
                                     );
@@ -348,7 +350,7 @@ export default function FilesPage() {
                 </div>
 
                 {/* File Editor Pane */}
-                <div style={{ flex: 1, display: "flex", flexDirection: "column", backgroundColor: "var(--bg-main)" }}>
+                <div style={{ flex: 1, display: "flex", flexDirection: "column", backgroundColor: "var(--bg-main)", minWidth: 0 }}>
                     {selFile ? (
                         <>
                             <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--border)", display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", background: "var(--bg-elevated)" }}>

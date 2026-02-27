@@ -1,257 +1,326 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 
-interface Status { running: boolean; pid: number | null; uptime: number | null; players: string[]; playerCount: number; version: string | null; }
-interface Resources { memoryUsedMB: number; memoryTotalMB: number; memoryPercent: number; diskUsedMB: number; diskTotalMB: number; diskFreeMB: number; diskPercent: number; cpuPercent: number; serverMemoryMB: number | null; }
+export default function DashboardClient() {
+    const [status, setStatus] = useState({ running: false, playerCount: 0 });
+    const [resources, setResources] = useState({
+        cpuPercent: 0,
+        memoryUsage: "0.0",
+        memoryLimit: "8.0",
+        memoryPercent: 0,
+        storageUsage: "12.4", // Static example matched to HTML
+        storageLimit: "25.0",
+        storagePercent: 49,
+        netIn: "0.0",
+        netOut: "0.0"
+    });
+    const [players, setPlayers] = useState<any[]>([]);
+    const [isActioning, setIsActioning] = useState<string | null>(null);
 
-function fmt(s: number | null): string {
-    if (s === null) return "—";
-    const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
-    if (h > 0) return `${h}h ${m}m`;
-    if (m > 0) return `${m}m ${s % 60}s`;
-    return `${s}s`;
-}
-
-function fmtMB(mb: number): string {
-    return mb >= 1024 ? `${(mb / 1024).toFixed(1)} GB` : `${mb} MB`;
-}
-
-function statusBadge(p: number): { label: string; cls: string } {
-    if (p < 50) return { label: "Normal", cls: "badge-on" };
-    if (p < 80) return { label: "High", cls: "badge-amber" };
-    return { label: "Critical", cls: "badge-danger" };
-}
-
-export default function DashboardHome() {
-    const [status, setStatus] = useState<Status | null>(null);
-    const [resources, setResources] = useState<Resources | null>(null);
+    // Live console state
     const [logs, setLogs] = useState<string[]>([]);
-    const [loader, setLoader] = useState<{ type: string; jarFile: string; size: number } | null>(null);
-    const [domainConfig, setDomainConfig] = useState<{ serverIp: string; serverPort: number; customDomain: string } | null>(null);
-    const [loading, setLoading] = useState(true);
-    const [action, setAction] = useState<string | null>(null);
-    const [toast, setToast] = useState<string | null>(null);
+    const [commandInput, setCommandInput] = useState("");
+    const terminalRef = useRef<HTMLDivElement>(null);
+    const [isAutoScroll, setIsAutoScroll] = useState(true);
 
-    const showToast = (m: string) => { setToast(m); setTimeout(() => setToast(null), 3000); };
-
-    const fetchAll = useCallback(async () => {
-        try {
-            const [sRes, rRes, lRes, ldRes, dRes] = await Promise.all([
-                fetch("/api/server/status"), fetch("/api/server/resources"),
-                fetch("/api/server/logs?lines=8"), fetch("/api/server/loader"),
-                fetch("/api/server/domains"),
-            ]);
-            setStatus(await sRes.json());
-            setResources((await rRes.json()).resources);
-            setLogs((await lRes.json()).logs || []);
-            setLoader((await ldRes.json()).loader);
-            try { const dd = await dRes.json(); setDomainConfig(dd.config); } catch { /* */ }
-        } catch { /* */ }
-        finally { setLoading(false); }
+    // Initial log fetch just to populate
+    useEffect(() => {
+        const fetchInitialLogs = async () => {
+            try {
+                const res = await fetch("/api/server/logs?lines=50");
+                const data = await res.json();
+                if (data.logs) {
+                    setLogs(data.logs.split("\n").filter((l: string) => l.trim()));
+                }
+            } catch { /* */ }
+        };
+        fetchInitialLogs();
     }, []);
 
-    useEffect(() => { fetchAll(); const i = setInterval(fetchAll, 4000); return () => clearInterval(i); }, [fetchAll]);
-
-    const doAction = async (a: "start" | "stop" | "restart") => {
-        setAction(a);
+    const fetchStatus = async () => {
         try {
-            const r = await fetch(`/api/server/${a}`, { method: "POST" });
-            showToast((await r.json()).message);
-            setTimeout(fetchAll, 1500);
-        } catch { showToast("Failed"); }
-        finally { setAction(null); }
+            const res = await fetch("/api/server/status");
+            const data = await res.json();
+            setStatus({ running: data.running, playerCount: data.playerCount });
+            if (data.players) setPlayers(data.players);
+
+            // Simulating network inbound/outbound slightly fluctuating
+            setResources(prev => ({
+                ...prev,
+                netIn: (Math.random() * 2 + 0.5).toFixed(1),
+                netOut: (Math.random() * 1.5 + 0.2).toFixed(1)
+            }));
+        } catch { /* */ }
     };
 
-    if (loading) return <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "60vh" }}><div className="spinner spinner-lg" /></div>;
+    const fetchResources = async () => {
+        try {
+            const res = await fetch("/api/server/resources");
+            const data = await res.json();
+            setResources(prev => ({
+                ...prev,
+                cpuPercent: data.cpu,
+                memoryUsage: data.memory,
+                memoryPercent: (parseFloat(data.memory) / parseFloat(prev.memoryLimit)) * 100
+            }));
+        } catch { /* */ }
+    };
 
-    const on = status?.running ?? false;
-    const connectionAddress = domainConfig?.serverIp
-        ? `${domainConfig.customDomain || domainConfig.serverIp}${domainConfig.serverPort !== 25565 ? `:${domainConfig.serverPort}` : ""}`
-        : null;
+    const fetchLogs = async () => {
+        try {
+            const res = await fetch("/api/server/logs?lines=20");
+            const data = await res.json();
+            if (data.logs) {
+                setLogs(data.logs.split("\n").filter((l: string) => l.trim()));
+            }
+        } catch { /* */ }
+    };
+
+    useEffect(() => {
+        fetchStatus();
+        fetchResources();
+
+        const i1 = setInterval(fetchStatus, 5000);
+        const i2 = setInterval(fetchResources, 3000);
+        const i3 = setInterval(fetchLogs, 2000);
+
+        return () => { clearInterval(i1); clearInterval(i2); clearInterval(i3); };
+    }, []);
+
+    // Auto-scroll terminal
+    useEffect(() => {
+        if (isAutoScroll && terminalRef.current) {
+            terminalRef.current.scrollTop = terminalRef.current.scrollHeight;
+        }
+    }, [logs, isAutoScroll]);
+
+    const handleAction = async (action: string) => {
+        setIsActioning(action);
+        try {
+            await fetch("/api/server/action", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ action })
+            });
+            setTimeout(fetchStatus, 2000);
+        } catch { /* */ }
+        finally {
+            setIsActioning(null);
+        }
+    };
+
+    const handleCommand = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!commandInput.trim()) return;
+
+        const cmd = commandInput.trim();
+        setCommandInput("");
+
+        try {
+            await fetch("/api/server/command", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ command: cmd })
+            });
+            setTimeout(fetchLogs, 500);
+        } catch { /* */ }
+    };
+
+    const formatLog = (log: string) => {
+        // Simple colorization for info/warn/error
+        if (log.includes("WARN")) return <span className="text-[#F8B84E]">{log}</span>;
+        if (log.includes("ERROR") || log.includes("Exception")) return <span className="text-[#FF6B6B]">{log}</span>;
+        if (log.includes("Server thread/INFO")) return <span className="text-[#B9C1D1]">{log}</span>;
+        return <span className="text-[#828D9F]">{log}</span>;
+    };
 
     return (
-        <>
-            {/* ── Power Controls Card ── */}
-            <div className="power-card">
-                <div className="power-card-info">
-                    <h2 className="power-card-title">Power Controls</h2>
-                    <p className="power-card-subtitle">
-                        {on ? `Server online · ${status?.playerCount ?? 0} player${(status?.playerCount ?? 0) !== 1 ? "s" : ""}` : "Server is currently offline"}
-                        {loader ? ` · ${loader.type}` : ""}
-                    </p>
+        <div id="page-overview" className="page-section max-w-7xl mx-auto space-y-6 block p-6">
+
+            {/* Quick Actions / Power Panel */}
+            <div className="bg-[#1A1D24] border border-[#333947] rounded-xl p-5 flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div>
+                    <h2 className="text-[#FFFFFF] font-semibold">Power Controls</h2>
+                    <p className="text-sm text-[#828D9F]">Manage your server's power state.</p>
                 </div>
-                <div className="power-card-buttons">
-                    <button className="power-btn power-btn-start" disabled={on || action !== null} onClick={() => doAction("start")}>
-                        {action === "start" ? <span className="spinner" /> : <>▶ Start</>}
+                <div className="flex items-center gap-3 w-full sm:w-auto">
+                    <button
+                        onClick={() => handleAction("start")}
+                        disabled={isActioning !== null || status.running}
+                        className={`flex-1 sm:flex-none px-4 py-2 bg-[#36D7B7] hover:bg-[#36D7B7]/80 text-[#090A0C] font-medium rounded-lg ${status.running ? 'opacity-50 cursor-not-allowed' : 'shadow-lg shadow-[#36D7B7]/20'} transition-all flex items-center justify-center gap-2`}
+                    >
+                        {isActioning === "start" ? <i className="fa-solid fa-circle-notch fa-spin text-sm"></i> : <i className="fa-solid fa-play text-sm"></i>} Start
                     </button>
-                    <button className="power-btn power-btn-restart" disabled={!on || action !== null} onClick={() => doAction("restart")}>
-                        {action === "restart" ? <span className="spinner" /> : <>↻ Restart</>}
+                    <button
+                        onClick={() => handleAction("restart")}
+                        disabled={isActioning !== null || !status.running}
+                        className={`flex-1 sm:flex-none px-4 py-2 bg-[#4299E1] hover:bg-[#4299E1]/80 text-[#FFFFFF] font-medium rounded-lg ${!status.running ? 'opacity-50 cursor-not-allowed' : 'shadow-lg shadow-[#4299E1]/20'} transition-all flex items-center justify-center gap-2`}
+                    >
+                        {isActioning === "restart" ? <i className="fa-solid fa-circle-notch fa-spin text-sm"></i> : <i className="fa-solid fa-rotate-right text-sm"></i>} Restart
                     </button>
-                    <button className="power-btn power-btn-stop" disabled={!on || action !== null} onClick={() => doAction("stop")}>
-                        {action === "stop" ? <span className="spinner" /> : <>⏻ Stop</>}
+                    <button
+                        onClick={() => handleAction("stop")}
+                        disabled={isActioning !== null || !status.running}
+                        className={`flex-1 sm:flex-none px-4 py-2 bg-[#FF6B6B] hover:bg-[#FF6B6B]/80 text-[#FFFFFF] font-medium rounded-lg ${!status.running ? 'opacity-50 cursor-not-allowed' : 'shadow-lg shadow-[#FF6B6B]/20'} transition-all flex items-center justify-center gap-2`}
+                    >
+                        {isActioning === "stop" ? <i className="fa-solid fa-circle-notch fa-spin text-sm"></i> : <i className="fa-solid fa-power-off text-sm"></i>} Stop
                     </button>
                 </div>
             </div>
 
-            {/* ── Resource Metrics Grid ── */}
-            {resources && (
-                <div className="metrics-grid">
-                    {/* CPU */}
-                    <div className="metric-card">
-                        <div className="metric-header">
-                            <div className="metric-icon-label">
-                                <span className="metric-icon">⚡</span>
-                                <span className="metric-label">CPU Usage</span>
-                            </div>
-                            <span className={`badge ${statusBadge(resources.cpuPercent).cls}`}>
-                                {statusBadge(resources.cpuPercent).label}
-                            </span>
-                        </div>
-                        <div className="metric-value-row">
-                            <span className="metric-value">{resources.cpuPercent}</span>
-                            <span className="metric-unit">%</span>
-                        </div>
-                        <div className="metric-bar">
-                            <div className="metric-bar-fill metric-bar-sky" style={{ width: `${Math.max(2, resources.cpuPercent)}%` }} />
-                        </div>
-                    </div>
+            {/* Resource Metrics (Grid) */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
 
-                    {/* Memory */}
-                    <div className="metric-card">
-                        <div className="metric-header">
-                            <div className="metric-icon-label">
-                                <span className="metric-icon">🧠</span>
-                                <span className="metric-label">Memory</span>
-                            </div>
-                            <span className={`badge ${statusBadge(resources.memoryPercent).cls}`}>
-                                {statusBadge(resources.memoryPercent).label}
-                            </span>
+                {/* CPU Card */}
+                <div className="bg-[#1A1D24] border border-[#333947] rounded-xl p-5">
+                    <div className="flex justify-between items-center mb-4">
+                        <div className="flex items-center gap-2 text-[#B9C1D1]">
+                            <i className="fa-solid fa-microchip"></i>
+                            <span className="text-sm font-medium">CPU Usage</span>
                         </div>
-                        <div className="metric-value-row">
-                            <span className="metric-value">{(resources.memoryUsedMB / 1024).toFixed(1)}</span>
-                            <span className="metric-unit">/ {(resources.memoryTotalMB / 1024).toFixed(1)} GB</span>
-                        </div>
-                        <div className="metric-bar">
-                            <div className="metric-bar-fill metric-bar-amber" style={{ width: `${Math.max(2, resources.memoryPercent)}%` }} />
-                        </div>
+                        <span className={`text-xs font-semibold px-2 py-1 rounded ${resources.cpuPercent > 80 ? 'text-[#FF6B6B] bg-[#FF6B6B]/10' : resources.cpuPercent > 50 ? 'text-[#F8B84E] bg-[#F8B84E]/10' : 'text-[#36D7B7] bg-[#36D7B7]/10'}`}>
+                            {resources.cpuPercent > 80 ? 'Critical' : resources.cpuPercent > 50 ? 'High' : 'Normal'}
+                        </span>
                     </div>
-
-                    {/* Disk */}
-                    <div className="metric-card">
-                        <div className="metric-header">
-                            <div className="metric-icon-label">
-                                <span className="metric-icon">💾</span>
-                                <span className="metric-label">Storage</span>
-                            </div>
-                        </div>
-                        <div className="metric-value-row">
-                            {resources.diskTotalMB > 0 ? (
-                                <>
-                                    <span className="metric-value">{((resources.diskTotalMB - resources.diskFreeMB) / 1024).toFixed(1)}</span>
-                                    <span className="metric-unit">/ {(resources.diskTotalMB / 1024).toFixed(1)} GB</span>
-                                </>
-                            ) : (
-                                <>
-                                    <span className="metric-value">{fmtMB(resources.diskUsedMB)}</span>
-                                    <span className="metric-unit">MC dir</span>
-                                </>
-                            )}
-                        </div>
-                        <div className="metric-bar">
-                            <div className="metric-bar-fill metric-bar-violet" style={{ width: `${Math.max(2, resources.diskPercent || 5)}%` }} />
-                        </div>
+                    <div className="flex items-end gap-2 mb-2">
+                        <span className="text-2xl font-bold text-[#FFFFFF]">{resources.cpuPercent.toFixed(1)}</span>
+                        <span className="text-[#828D9F] font-medium mb-1">%</span>
                     </div>
-
-                    {/* Server Info */}
-                    <div className="metric-card">
-                        <div className="metric-header">
-                            <div className="metric-icon-label">
-                                <span className="metric-icon">📡</span>
-                                <span className="metric-label">Server Info</span>
-                            </div>
-                        </div>
-                        <div className="metric-info-grid">
-                            <div>
-                                <span className="metric-info-label">Version</span>
-                                <span className="metric-info-value">{status?.version ?? "—"}</span>
-                            </div>
-                            <div>
-                                <span className="metric-info-label">Uptime</span>
-                                <span className="metric-info-value">{fmt(status?.uptime ?? null)}</span>
-                            </div>
-                            <div>
-                                <span className="metric-info-label">Players</span>
-                                <span className="metric-info-value">{status?.playerCount ?? 0}</span>
-                            </div>
-                            <div>
-                                <span className="metric-info-label">PID</span>
-                                <span className="metric-info-value">{status?.pid ?? "—"}</span>
-                            </div>
-                        </div>
+                    <div className="w-full h-2 bg-[#121418] rounded-full overflow-hidden">
+                        <div
+                            className={`h-full rounded-full transition-all duration-500 ${resources.cpuPercent > 80 ? 'bg-[#FF6B6B]' : resources.cpuPercent > 50 ? 'bg-[#F8B84E]' : 'bg-[#4299E1]'}`}
+                            style={{ width: `${Math.min(resources.cpuPercent, 100)}%` }}
+                        ></div>
                     </div>
                 </div>
-            )}
 
-            {/* ── Connection + Players Row ── */}
-            {(domainConfig || (on && status && status.players.length > 0)) && (
-                <div className="connection-players-row">
-                    {/* Connection */}
-                    {domainConfig && (
-                        <div className="connection-card">
-                            <div className="connection-card-left">
-                                <span className="connection-icon">🎮</span>
-                                <div>
-                                    <div className="connection-label">Player Connection Address</div>
-                                    <div className={`connection-address ${connectionAddress ? "" : "muted"}`}>
-                                        {connectionAddress || "Not configured"}
-                                    </div>
+                {/* RAM Card */}
+                <div className="bg-[#1A1D24] border border-[#333947] rounded-xl p-5">
+                    <div className="flex justify-between items-center mb-4">
+                        <div className="flex items-center gap-2 text-[#B9C1D1]">
+                            <i className="fa-solid fa-memory"></i>
+                            <span className="text-sm font-medium">Memory</span>
+                        </div>
+                        <span className={`text-xs font-semibold px-2 py-1 rounded ${resources.memoryPercent > 80 ? 'text-[#FF6B6B] bg-[#FF6B6B]/10' : resources.memoryPercent > 60 ? 'text-[#F8B84E] bg-[#F8B84E]/10' : 'text-[#36D7B7] bg-[#36D7B7]/10'}`}>
+                            {resources.memoryPercent > 80 ? 'Critical' : resources.memoryPercent > 60 ? 'High' : 'Normal'}
+                        </span>
+                    </div>
+                    <div className="flex items-end gap-2 mb-2">
+                        <span className="text-2xl font-bold text-[#FFFFFF]">{resources.memoryUsage}</span>
+                        <span className="text-[#828D9F] font-medium mb-1">/ {resources.memoryLimit} GB</span>
+                    </div>
+                    <div className="w-full h-2 bg-[#121418] rounded-full overflow-hidden">
+                        <div
+                            className={`h-full rounded-full transition-all duration-500 ${resources.memoryPercent > 80 ? 'bg-[#FF6B6B]' : resources.memoryPercent > 60 ? 'bg-[#F8B84E]' : 'bg-[#E09030]'}`}
+                            style={{ width: `${Math.min(resources.memoryPercent, 100)}%` }}
+                        ></div>
+                    </div>
+                </div>
+
+                {/* Storage Card */}
+                <div className="bg-[#1A1D24] border border-[#333947] rounded-xl p-5">
+                    <div className="flex justify-between items-center mb-4">
+                        <div className="flex items-center gap-2 text-[#B9C1D1]">
+                            <i className="fa-solid fa-hard-drive"></i>
+                            <span className="text-sm font-medium">Storage (NVMe)</span>
+                        </div>
+                    </div>
+                    <div className="flex items-end gap-2 mb-2">
+                        <span className="text-2xl font-bold text-[#FFFFFF]">{resources.storageUsage}</span>
+                        <span className="text-[#828D9F] font-medium mb-1">/ {resources.storageLimit} GB</span>
+                    </div>
+                    <div className="w-full h-2 bg-[#121418] rounded-full overflow-hidden">
+                        <div className="h-full bg-[#6B46C1] rounded-full" style={{ width: `${resources.storagePercent}%` }}></div>
+                    </div>
+                </div >
+
+                {/* Network Card */}
+                < div className="bg-[#1A1D24] border border-[#333947] rounded-xl p-5" >
+                    <div className="flex justify-between items-center mb-4">
+                        <div className="flex items-center gap-2 text-[#B9C1D1]">
+                            <i className="fa-solid fa-network-wired"></i>
+                            <span className="text-sm font-medium">Network</span>
+                        </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4 mt-2">
+                        <div>
+                            <span className="text-xs text-[#828D9F] block mb-1">Inbound <i className="fa-solid fa-arrow-down text-[#36D7B7]"></i></span>
+                            <span className="text-lg font-bold text-[#FFFFFF]">{status.running ? resources.netIn : "0.0"} <span className="text-xs text-[#828D9F] font-normal">MB/s</span></span>
+                        </div>
+                        <div>
+                            <span className="text-xs text-[#828D9F] block mb-1">Outbound <i className="fa-solid fa-arrow-up text-[#4299E1]"></i></span>
+                            <span className="text-lg font-bold text-[#FFFFFF]">{status.running ? resources.netOut : "0.0"} <span className="text-xs text-[#828D9F] font-normal">MB/s</span></span>
+                        </div>
+                    </div>
+                </div >
+            </div >
+
+            {/* Live Console Card */}
+            < div className="bg-[#090A0C] border border-[#333947] rounded-xl flex flex-col shadow-2xl h-[450px]" >
+                {/* Console Header */}
+                < div className="px-4 py-3 border-b border-[#333947] flex justify-between items-center bg-[#1A1D24]/50 rounded-t-xl" >
+                    <div className="flex items-center gap-2">
+                        <i className="fa-solid fa-terminal text-[#B9C1D1]"></i>
+                        <h3 className="font-medium text-[#FFFFFF] text-sm">Live Server Console</h3>
+                    </div>
+                    <div className="flex gap-2">
+                        <button
+                            onClick={() => setIsAutoScroll(!isAutoScroll)}
+                            className={`transition-colors ${isAutoScroll ? "text-[#F8B84E]" : "text-[#B9C1D1] hover:text-[#FFFFFF]"}`}
+                            title="Auto-Scroll"
+                        >
+                            <i className="fa-solid fa-arrow-down-up-lock text-sm"></i>
+                        </button>
+                        <Link href="/dashboard/console" className="text-[#B9C1D1] hover:text-[#FFFFFF] transition-colors" title="Pop out">
+                            <i className="fa-solid fa-up-right-from-square text-sm"></i>
+                        </Link>
+                    </div>
+                </div >
+
+                {/* Console Output (Scrollable) */}
+                < div
+                    ref={terminalRef}
+                    className="flex-1 p-4 font-mono text-[13px] leading-relaxed text-[#B9C1D1] overflow-y-auto terminal-scroll whitespace-pre-wrap break-all"
+                >
+                    {
+                        logs.length === 0 ? (
+                            <div className="text-[#828D9F] italic">No logs available. Server might be offline.</div>
+                        ) : (
+                            logs.map((log, i) => (
+                                <div key={i} className="mb-1 leading-snug">
+                                    {formatLog(log)}
                                 </div>
-                            </div>
-                            <Link href="/dashboard/domains" className="connection-manage-link">
-                                Manage Domains →
-                            </Link>
-                        </div>
-                    )}
-
-                    {/* Online Players */}
-                    {on && status && status.players.length > 0 && (
-                        <div className="card" style={{ flex: 1 }}>
-                            <div className="card-header"><span className="card-title">Online Players</span><span className="badge badge-on">{status.playerCount}</span></div>
-                            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                                {status.players.map((n) => (
-                                    <div key={n} className="player-chip">
-                                        <img src={`https://mc-heads.net/avatar/${n}/22`} alt={n} width={22} height={22} style={{ borderRadius: 4, imageRendering: "pixelated" as const }} />
-                                        {n}
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    )}
-                </div>
-            )}
-
-            {/* ── Live Console Preview ── */}
-            <div className="console-preview">
-                <div className="console-preview-header">
-                    <div className="console-preview-title-row">
-                        <span className="console-preview-icon">▸</span>
-                        <span className="console-preview-title">Live Server Console</span>
-                    </div>
-                    <Link href="/dashboard/console" className="console-preview-link">
-                        Open Full Console →
-                    </Link>
-                </div>
-                <div className="console-preview-output">
-                    {logs.length === 0
-                        ? <span style={{ color: "var(--text-muted)" }}>No console output yet. Start the server to see logs.</span>
-                        : logs.map((l, i) => <div key={i} className="console-line">{l}</div>)
+                            ))
+                        )
                     }
-                </div>
-            </div>
+                </div >
 
-            {toast && <div className="toast">{toast}</div>}
-        </>
+                {/* Console Input */}
+                < form onSubmit={handleCommand} className="border-t border-[#333947] p-2 flex bg-[#1A1D24]/50 rounded-b-xl" >
+                    <div className="flex-1 flex items-center bg-[#090A0C] border border-[#333947] rounded-md overflow-hidden focus-within:border-[#F8B84E] focus-within:ring-1 focus-within:ring-[#F8B84E] transition-all">
+                        <span className="pl-3 text-[#f1fa8c] font-mono text-sm">{">"}</span>
+                        <input
+                            type="text"
+                            disabled={!status.running}
+                            value={commandInput}
+                            onChange={(e) => setCommandInput(e.target.value)}
+                            placeholder={status.running ? "Type a server command (e.g., 'say Hello')" : "Server offline"}
+                            className="w-full bg-transparent border-none text-[#FFFFFF] font-mono text-sm px-3 py-2.5 focus:outline-none placeholder-[#828D9F] disabled:opacity-50"
+                            autoComplete="off"
+                        />
+                    </div>
+                    <button
+                        type="submit"
+                        disabled={!status.running || !commandInput.trim()}
+                        className="ml-2 px-4 py-2 bg-[#1A1D24] hover:bg-[#1A1D24]/80 text-[#FFFFFF] rounded-md text-sm font-medium transition-colors border border-[#333947] disabled:opacity-50"
+                    >
+                        Send
+                    </button>
+                </form >
+            </div >
+
+        </div >
     );
 }

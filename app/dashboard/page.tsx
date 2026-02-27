@@ -59,12 +59,19 @@ export default function DashboardClient() {
         try {
             const res = await fetch("/api/server/resources");
             const data = await res.json();
-            setResources(prev => ({
-                ...prev,
-                cpuPercent: data.cpu,
-                memoryUsage: data.memory,
-                memoryPercent: (parseFloat(data.memory) / parseFloat(prev.memoryLimit)) * 100
-            }));
+            setResources(prev => {
+                const cpu = typeof data.cpu === 'number' ? data.cpu : 0;
+                const memUsage = typeof data.memory === 'string' ? data.memory : "0.0";
+                const memLimit = parseFloat(prev.memoryLimit) || 8.0;
+                const memPercent = (parseFloat(memUsage) / memLimit) * 100;
+
+                return {
+                    ...prev,
+                    cpuPercent: cpu,
+                    memoryUsage: memUsage,
+                    memoryPercent: isNaN(memPercent) ? 0 : memPercent
+                };
+            });
         } catch { /* */ }
     };
 

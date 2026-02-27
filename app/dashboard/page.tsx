@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 
 interface Status { running: boolean; pid: number | null; uptime: number | null; players: string[]; playerCount: number; version: string | null; }
-interface Resources { memoryUsedMB: number; memoryTotalMB: number; memoryPercent: number; diskUsedMB: number; cpuPercent: number; serverMemoryMB: number | null; }
+interface Resources { memoryUsedMB: number; memoryTotalMB: number; memoryPercent: number; diskUsedMB: number; diskTotalMB: number; diskFreeMB: number; diskPercent: number; cpuPercent: number; serverMemoryMB: number | null; }
 
 function fmt(s: number | null): string {
     if (s === null) return "—";
@@ -165,12 +165,16 @@ export default function DashboardHome() {
                     </div>
                     <div className="card">
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                            <span style={{ fontSize: 12, fontWeight: 700, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Disk (Server)</span>
-                            <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--text-muted)" }}>{fmtMB(resources.diskUsedMB)}</span>
+                            <span style={{ fontSize: 12, fontWeight: 700, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Disk</span>
+                            <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--text-muted)" }}>
+                                {resources.diskTotalMB > 0
+                                    ? `${fmtMB(resources.diskTotalMB - resources.diskFreeMB)} / ${fmtMB(resources.diskTotalMB)}`
+                                    : `MC: ${fmtMB(resources.diskUsedMB)}`}
+                            </span>
                         </div>
                         <div className="gauge">
-                            <div className="gauge-bar"><div className="gauge-fill low" style={{ width: `${Math.max(5, Math.min(100, resources.diskUsedMB / 10))}%` }} /></div>
-                            <div className="gauge-label"><span>minecraft directory</span></div>
+                            <div className="gauge-bar"><div className={`gauge-fill ${gaugeClass(resources.diskPercent || 0)}`} style={{ width: `${Math.max(3, resources.diskPercent || 0)}%` }} /></div>
+                            <div className="gauge-label"><span>{resources.diskPercent > 0 ? `${resources.diskPercent}% used` : `MC dir: ${fmtMB(resources.diskUsedMB)}`}</span></div>
                         </div>
                     </div>
                 </div>

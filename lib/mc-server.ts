@@ -462,6 +462,7 @@ export interface ResourceInfo {
     memoryTotalMB: number;
     memoryPercent: number;
     diskUsedMB: number;
+    diskTotalMB: number;
     diskFreeMB: number;
     diskPercent: number;
     cpuPercent: number;
@@ -470,6 +471,7 @@ export interface ResourceInfo {
 
 export function getResources(): ResourceInfo {
     const os = require("os");
+    const { execSync } = require("child_process");
     const totalMem = os.totalmem();
     const freeMem = os.freemem();
     const usedMem = totalMem - freeMem;
@@ -479,6 +481,37 @@ export function getResources(): ResourceInfo {
     try {
         diskUsed = getDirSizeRecursive(MC_DIR);
     } catch { /* */ }
+
+    // Get total and free disk space for the drive containing MC_DIR
+    let diskTotalMB = 0;
+    let diskFreeMB = 0;
+    try {
+        if (process.platform === "win32") {
+            // Windows: use wmic to get disk info
+            const drive = path.resolve(MC_DIR).substring(0, 2); // e.g. "C:"
+            const out = execSync(`wmic logicaldisk where "DeviceID='${drive}'" get Size,FreeSpace /format:csv`, { encoding: "utf-8" });
+            const lines = out.trim().split("\n").filter((l: string) => l.trim() && !l.startsWith("Node"));
+            if (lines.length > 0) {
+                const parts = lines[lines.length - 1].split(",");
+                // CSV: Node,FreeSpace,Size
+                const freeSpace = parseInt(parts[1]) || 0;
+                const totalSpace = parseInt(parts[2]) || 0;
+                diskTotalMB = Math.round(totalSpace / 1024 / 1024);
+                diskFreeMB = Math.round(freeSpace / 1024 / 1024);
+            }
+        } else {
+            // Linux/Mac: use df
+            const out = execSync(`df -B1 "${MC_DIR}" | tail -1`, { encoding: "utf-8" });
+            const parts = out.trim().split(/\s+/);
+            if (parts.length >= 4) {
+                diskTotalMB = Math.round(parseInt(parts[1]) / 1024 / 1024);
+                diskFreeMB = Math.round(parseInt(parts[3]) / 1024 / 1024);
+            }
+        }
+    } catch { /* fallback: keep 0 */ }
+
+    const diskUsedMB = Math.round(diskUsed / 1024 / 1024);
+    const diskPercent = diskTotalMB > 0 ? Math.round(((diskTotalMB - diskFreeMB) / diskTotalMB) * 100) : 0;
 
     // Estimate CPU from load average (or 0 on Windows)
     const loadAvg = os.loadavg();
@@ -498,9 +531,10 @@ export function getResources(): ResourceInfo {
         memoryUsedMB: Math.round(usedMem / 1024 / 1024),
         memoryTotalMB: Math.round(totalMem / 1024 / 1024),
         memoryPercent: Math.round((usedMem / totalMem) * 100),
-        diskUsedMB: Math.round(diskUsed / 1024 / 1024),
-        diskFreeMB: 0, // Will be calculated on the frontend
-        diskPercent: 0,
+        diskUsedMB,
+        diskTotalMB,
+        diskFreeMB,
+        diskPercent,
         cpuPercent,
         serverMemoryMB: serverMemMB,
     };

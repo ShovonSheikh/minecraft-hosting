@@ -1,8 +1,28 @@
 import fs from "fs";
 import path from "path";
+import os from "os";
 
-const DATA_DIR = path.join(process.cwd(), "data");
-const DOMAINS_FILE = path.join(DATA_DIR, "domains.json");
+// Try writable data dir, fall back to /tmp for serverless (Vercel)
+function getDataDir(): string {
+    const primary = path.join(process.cwd(), "data");
+    try {
+        if (!fs.existsSync(primary)) fs.mkdirSync(primary, { recursive: true });
+        // Test if writable
+        const testFile = path.join(primary, ".write-test");
+        fs.writeFileSync(testFile, "ok");
+        fs.unlinkSync(testFile);
+        return primary;
+    } catch {
+        // Fallback to tmp (works on Vercel, but data is ephemeral)
+        const fallback = path.join(os.tmpdir(), "mcpanel-data");
+        if (!fs.existsSync(fallback)) fs.mkdirSync(fallback, { recursive: true });
+        return fallback;
+    }
+}
+
+function getDomainsPath(): string {
+    return path.join(getDataDir(), "domains.json");
+}
 
 export interface DomainConfig {
     serverIp: string;          // Public IP of the machine running the MC server
@@ -13,8 +33,8 @@ export interface DomainConfig {
 }
 
 function ensureFile() {
-    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-    if (!fs.existsSync(DOMAINS_FILE)) {
+    const filePath = getDomainsPath();
+    if (!fs.existsSync(filePath)) {
         const defaults: DomainConfig = {
             serverIp: "",
             serverPort: 25565,
@@ -22,20 +42,48 @@ function ensureFile() {
             dashboardUrl: "",
             notes: "",
         };
-        fs.writeFileSync(DOMAINS_FILE, JSON.stringify(defaults, null, 2));
+        fs.writeFileSync(filePath, JSON.stringify(defaults, null, 2));
     }
 }
 
 export function getDomainConfig(): DomainConfig {
     ensureFile();
-    return JSON.parse(fs.readFileSync(DOMAINS_FILE, "utf-8"));
+    return JSON.parse(fs.readFileSync(getDomainsPath(), "utf-8"));
 }
 
 export function setDomainConfig(update: Partial<DomainConfig>): { success: boolean; config: DomainConfig } {
     const current = getDomainConfig();
     const merged = { ...current, ...update };
-    fs.writeFileSync(DOMAINS_FILE, JSON.stringify(merged, null, 2));
+    fs.writeFileSync(getDomainsPath(), JSON.stringify(merged, null, 2));
     return { success: true, config: merged };
+}
+
+/**
+ * Auto-detect the server's public IP address by querying external services.
+ */
+export async function getPublicIp(): Promise<string> {
+    const services = [
+        "https://api.ipify.org",
+        "https://ifconfig.me/ip",
+        "https://icanhazip.com",
+    ];
+    for (const url of services) {
+        try {
+            const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
+            if (res.ok) {
+                const ip = (await res.text()).trim();
+                if (/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(ip)) return ip;
+            }
+        } catch { /* try next */ }
+    }
+    // Fallback: return first non-internal IPv4
+    const nets = os.networkInterfaces();
+    for (const name of Object.keys(nets)) {
+        for (const net of nets[name] || []) {
+            if (net.family === "IPv4" && !net.internal) return net.address;
+        }
+    }
+    return "127.0.0.1";
 }
 
 /**

@@ -31,6 +31,7 @@ export default function DomainsPage() {
     const [saving, setSaving] = useState(false);
     const [toast, setToast] = useState<string | null>(null);
     const [copied, setCopied] = useState<string | null>(null);
+    const [detectedIp, setDetectedIp] = useState<string | null>(null);
     const msg = (m: string) => { setToast(m); setTimeout(() => setToast(null), 3500); };
 
     const fetchConfig = useCallback(async () => {
@@ -41,6 +42,7 @@ export default function DomainsPage() {
             setOrig(data.config);
             setRecords(data.dns?.records || []);
             setInstructions(data.dns?.instructions || []);
+            if (data.detectedIp) setDetectedIp(data.detectedIp);
         } catch { /* */ }
         finally { setLoading(false); }
     }, []);
@@ -61,7 +63,7 @@ export default function DomainsPage() {
                 setRecords(data.dns?.records || []);
                 setInstructions(data.dns?.instructions || []);
                 msg("Domain configuration saved!");
-            } else { msg("Failed to save"); }
+            } else { msg(data.message || "Failed to save"); }
         } catch { msg("Save failed"); }
         finally { setSaving(false); }
     };
@@ -135,9 +137,17 @@ export default function DomainsPage() {
                     <div className="card-header"><span className="card-title">🖥 Server Connection</span></div>
                     <div className="field">
                         <label className="field-label">Server IP Address <span className="hint">Public IP of your Minecraft host</span></label>
-                        <input className="input input-mono" placeholder="e.g. 203.0.113.45" value={config.serverIp}
-                            onChange={e => setConfig(c => ({ ...c, serverIp: e.target.value }))}
-                            style={config.serverIp !== (orig?.serverIp ?? "") ? { borderColor: "var(--amber)", boxShadow: "0 0 0 2px var(--amber-dim)" } : {}} />
+                        <div style={{ display: "flex", gap: 8 }}>
+                            <input className="input input-mono" placeholder="e.g. 203.0.113.45" value={config.serverIp}
+                                onChange={e => setConfig(c => ({ ...c, serverIp: e.target.value }))}
+                                style={{ flex: 1, ...(config.serverIp !== (orig?.serverIp ?? "") ? { borderColor: "var(--amber)", boxShadow: "0 0 0 2px var(--amber-dim)" } : {}) }} />
+                            {detectedIp && detectedIp !== "127.0.0.1" && (
+                                <button className="btn btn-outline btn-sm" style={{ whiteSpace: "nowrap", fontSize: 11 }}
+                                    onClick={() => setConfig(c => ({ ...c, serverIp: detectedIp }))}>
+                                    Use detected: {detectedIp}
+                                </button>
+                            )}
+                        </div>
                     </div>
                     <div className="field">
                         <label className="field-label">Server Port <span className="hint">Default: 25565</span></label>
@@ -146,7 +156,7 @@ export default function DomainsPage() {
                             style={config.serverPort !== (orig?.serverPort ?? 25565) ? { borderColor: "var(--amber)", boxShadow: "0 0 0 2px var(--amber-dim)" } : {}} />
                     </div>
                     <div style={{ padding: "10px 14px", background: "var(--bg-surface)", borderRadius: 8, border: "1px solid var(--border-subtle)", fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.6 }}>
-                        💡 This is the public IP address of the machine running your Minecraft server — <strong>not</strong> the Vercel/Netlify dashboard URL.
+                        💡 This is the public IP of the machine running your Minecraft server. It is auto-detected when available — <strong>not</strong> the Vercel/Netlify dashboard URL.
                     </div>
                 </div>
 

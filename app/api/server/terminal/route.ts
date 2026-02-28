@@ -20,10 +20,12 @@ export async function POST(request: NextRequest) {
             return Response.json({ success: false, message: "Invalid command" });
         }
 
+        const shell = process.platform === 'win32' ? (process.env.ComSpec || 'cmd.exe') : '/bin/sh';
         // Execute command in the context of the MC directory
         const { stdout, stderr } = await execPromise(command, {
             cwd: MC_DIR,
-            timeout: 10000 // 10s timeout to prevent hanging
+            timeout: 10000, // 10s timeout to prevent hanging
+            shell: shell
         });
 
         return Response.json({

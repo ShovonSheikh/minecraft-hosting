@@ -150,7 +150,7 @@ export default function DashboardClient() {
                         // Ensure console logs stream live during the startup/shutdown sequence
                         await fetchLogs();
 
-                        if (action === "stop" && !statusData.running) return;
+                        if ((action === "stop" || action === "kill") && !statusData.running) return;
                         if ((action === "start" || action === "restart") && statusData.running) return;
                     } catch { /* */ }
                 }
@@ -223,6 +223,18 @@ export default function DashboardClient() {
                         className={`flex-1 sm:flex-none px-4 py-2 bg-[#FF6B6B] hover:bg-[#FF6B6B]/80 text-[#FFFFFF] font-medium rounded-lg ${!status.running ? 'opacity-50 cursor-not-allowed' : 'shadow-lg shadow-[#FF6B6B]/20'} transition-all flex items-center justify-center gap-2`}
                     >
                         {isActioning === "stop" ? <i className="fa-solid fa-circle-notch fa-spin text-sm"></i> : <i className="fa-solid fa-power-off text-sm"></i>} Stop
+                    </button>
+                    <button
+                        onClick={() => {
+                            if (window.confirm("Are you sure you want to FORCE KILL the server? This may cause data corruption! Use Stop when possible.")) {
+                                handleAction("kill");
+                            }
+                        }}
+                        disabled={isActioning !== null || !status.running}
+                        className={`flex-1 sm:flex-none px-4 py-2 bg-red-800 hover:bg-red-900 text-[#FFFFFF] font-medium rounded-lg ${!status.running ? 'opacity-50 cursor-not-allowed' : 'shadow-lg shadow-red-900/20'} transition-all flex items-center justify-center gap-2 border border-red-500/30`}
+                        title="Force Kill Process"
+                    >
+                        {isActioning === "kill" ? <i className="fa-solid fa-circle-notch fa-spin text-sm"></i> : <i className="fa-solid fa-skull-crossbones text-sm"></i>} Kill
                     </button>
                 </div>
             </div>

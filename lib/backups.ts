@@ -1,8 +1,15 @@
 import fs from "fs";
 import path from "path";
 
-const MC_DIR = path.join(process.cwd(), "minecraft");
-const BACKUP_DIR = path.join(process.cwd(), "backups");
+import os from "os";
+
+const isVercel = process.env.VERCEL === "1" || process.env.VERCEL_ENV !== undefined;
+const MC_DIR = process.env.MC_DIR || (isVercel
+    ? path.join(os.tmpdir(), "minecraft")
+    : path.join(process.cwd(), "minecraft"));
+const BACKUP_DIR = process.env.BACKUP_DIR || (isVercel
+    ? path.join(os.tmpdir(), "backups")
+    : path.join(process.cwd(), "backups"));
 
 export interface BackupInfo {
     name: string;

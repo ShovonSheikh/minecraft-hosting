@@ -23,7 +23,9 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        const pluginsDir = path.join(process.cwd(), "minecraft", "plugins");
+        const isVercel = process.env.VERCEL === "1" || process.env.VERCEL_ENV !== undefined;
+        const mcDir = process.env.MC_DIR || (isVercel ? path.join(require('os').tmpdir(), "minecraft") : path.join(process.cwd(), "minecraft"));
+        const pluginsDir = path.join(mcDir, "plugins");
         if (!fs.existsSync(pluginsDir)) {
             fs.mkdirSync(pluginsDir, { recursive: true });
         }

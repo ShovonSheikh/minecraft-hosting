@@ -4,7 +4,12 @@ import { NextRequest } from "next/server";
 
 export const dynamic = "force-dynamic";
 
-const MC_DIR = path.join(process.cwd(), "minecraft");
+import os from "os";
+
+const isVercel = process.env.VERCEL === "1" || process.env.VERCEL_ENV !== undefined;
+const MC_DIR = process.env.MC_DIR || (isVercel
+    ? path.join(os.tmpdir(), "minecraft")
+    : path.join(process.cwd(), "minecraft"));
 
 export async function POST(request: NextRequest) {
     try {

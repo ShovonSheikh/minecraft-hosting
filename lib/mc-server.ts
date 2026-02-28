@@ -5,7 +5,11 @@ import os from "os";
 import https from "https";
 import yauzl from "yauzl";
 
-const MC_DIR = path.join(process.cwd(), "minecraft");
+const isVercel = process.env.VERCEL === "1" || process.env.VERCEL_ENV !== undefined;
+const MC_DIR = process.env.MC_DIR || (isVercel
+    ? path.join(os.tmpdir(), "minecraft")
+    : path.join(process.cwd(), "minecraft"));
+
 const MAX_LOG_LINES = 500;
 const JAVA_DIR = path.join(MC_DIR, ".mcpanel", "java");
 
@@ -207,6 +211,16 @@ export function stopServer(): { success: boolean; message: string } {
 
     sendCommand("stop");
     return { success: true, message: "Stop command sent" };
+}
+
+export function killServer(): { success: boolean; message: string } {
+    if (!state.process || state.process.killed) {
+        return { success: false, message: "Server is not running" };
+    }
+
+    state.process.kill("SIGKILL");
+    appendLog(`[MCPanel] Process forcefully killed by user.`);
+    return { success: true, message: "Server process killed" };
 }
 
 export async function restartServer(): Promise<{

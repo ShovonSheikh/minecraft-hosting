@@ -161,13 +161,21 @@ export function startServer(): {
     const localJavaPath = getJavaExecutablePath();
     const javaCommand = localJavaPath || "java";
 
+    const eulaPath = path.join(MC_DIR, "eula.txt");
+    if (!fs.existsSync(eulaPath)) {
+        fs.writeFileSync(eulaPath, "eula=true\n", "utf-8");
+        appendLog(`[MCPanel] Automatically accepted Minecraft EULA to allow server startup.`);
+    }
+
+    const ramAmount = process.env.SERVER_RAM || "1G";
+
     state.logs = [];
     state.players.clear();
     state.version = null;
 
     const child = spawn(
         javaCommand,
-        ["-Xmx1G", "-Xms1G", "-jar", jarFile, "nogui"],
+        [`-Xmx${ramAmount}`, `-Xms${ramAmount}`, "-jar", jarFile, "nogui"],
         {
             cwd: MC_DIR,
             stdio: ["pipe", "pipe", "pipe"],

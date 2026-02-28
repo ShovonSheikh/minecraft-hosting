@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: minecraft-panel
+    env: node
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    disk:
+      name: minecraft_data
+      mountPath: /opt/render/project/src/minecraft
+      sizeGB: 10
+    envVars:
+      - key: MC_DIR
+        value: /opt/render/project/src/minecraft
+      - key: BACKUP_DIR
+        value: /opt/render/project/src/backups
+      - key: SERVER_RAM
+        value: 512M

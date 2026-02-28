@@ -345,7 +345,7 @@ export default function DashboardClient() {
                         >
                             <i className="fa-solid fa-arrow-down-up-lock text-sm"></i>
                         </button>
-                        <Link href="/dashboard/console" className="text-[#B9C1D1] hover:text-[#FFFFFF] transition-colors" title="Pop out">
+                        <Link href="/dashboard/terminal" className="text-[#B9C1D1] hover:text-[#FFFFFF] transition-colors" title="Pop out">
                             <i className="fa-solid fa-up-right-from-square text-sm"></i>
                         </Link>
                     </div>

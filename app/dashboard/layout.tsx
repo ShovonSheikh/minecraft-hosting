@@ -9,7 +9,7 @@ const NAV = [
         label: "Management",
         items: [
             { href: "/dashboard", label: "Overview", icon: "fa-solid fa-chart-pie" },
-            { href: "/dashboard/console", label: "Console", icon: "fa-solid fa-terminal" },
+            { href: "/dashboard/terminal", label: "Terminal", icon: "fa-solid fa-terminal" },
             { href: "/dashboard/files", label: "File Manager", icon: "fa-solid fa-folder-open" },
             { href: "/dashboard/players", label: "Players", icon: "fa-solid fa-users" },
         ],

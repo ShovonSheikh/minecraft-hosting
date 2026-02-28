@@ -4,6 +4,7 @@ import fs from "fs";
 import os from "os";
 import https from "https";
 import yauzl from "yauzl";
+import * as tar from "tar";
 
 const isVercel = process.env.VERCEL === "1" || process.env.VERCEL_ENV !== undefined;
 const MC_DIR = process.env.MC_DIR || (isVercel
@@ -918,8 +919,7 @@ async function installJava(): Promise<void> {
         if (extension === "zip") {
             await extractZip(archivePath, JAVA_DIR);
         } else {
-            // macOS or Linux: native tar is universally available
-            execSync(`tar -xzf "${archivePath}" -C "${JAVA_DIR}"`, { stdio: "pipe" });
+            await tar.x({ file: archivePath, cwd: JAVA_DIR });
         }
 
         appendLog(`[MCPanel] Java 17 installed successfully to local environment.`);

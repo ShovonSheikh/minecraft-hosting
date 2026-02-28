@@ -85,7 +85,10 @@ export default function DashboardClient() {
             const data = await res.json();
             if (data.logs) {
                 const logArr = Array.isArray(data.logs) ? data.logs : data.logs.split("\n");
-                setLogs(logArr.filter((l: string) => l.trim()));
+                const filtered = logArr.filter((l: string) => l.trim());
+                if (filtered.length > 0) {
+                    setLogs(filtered);
+                }
             }
         } catch { /* */ }
     };

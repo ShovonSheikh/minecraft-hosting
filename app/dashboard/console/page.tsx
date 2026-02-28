@@ -25,9 +25,11 @@ export default function ConsolePage() {
             const [lr, sr] = await Promise.all([fetch("/api/server/logs?lines=500"), fetch("/api/server/status")]);
             const logsData = await lr.json();
             const statusData = await sr.json();
-            // logs is already an array from the API
             const logArr = Array.isArray(logsData.logs) ? logsData.logs : (logsData.logs || "").split("\n");
-            setLogs(logArr.filter((l: string) => l.trim()));
+            const filtered = logArr.filter((l: string) => l.trim());
+            if (filtered.length > 0) {
+                setLogs(filtered);
+            }
             setOn(statusData.running);
         } catch { /* */ }
     }, []);

@@ -727,7 +727,7 @@ export function getResources(): ResourceInfo {
             }
         } else {
             // Linux/Mac: use df
-            const out = execSync(`df - B1 "${MC_DIR}" | tail - 1`, { encoding: "utf-8" });
+            const out = execSync(`df -B1 "${MC_DIR}" 2>/dev/null | tail -1`, { encoding: "utf-8" });
             const parts = out.trim().split(/\s+/);
             if (parts.length >= 4) {
                 diskTotalMB = Math.round(parseInt(parts[1]) / 1024 / 1024);
